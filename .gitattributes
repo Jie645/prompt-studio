@@ -1,0 +1,9 @@
+# 统一文本换行（仓库内 LF），但下面的特例优先
+* text=auto
+# run.cmd 是 GBK(936) 编码的批处理：行尾与字节都必须原样保存
+*.cmd binary
+# PowerShell 脚本用 CRLF
+*.ps1 text eol=crlf
+# 二进制
+*.ico binary
+*.png binary

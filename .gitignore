@@ -1,0 +1,10 @@
+# 运行时数据产物：不要提交（可能含加密后的密钥）
+src/data/*.bak
+src/data/*.corrupt-*
+src/data/*.tmp
+# 打包产物
+*.zip
+PromptStudio-Setup-*
+# 临时目录
+_run/
+node_modules/

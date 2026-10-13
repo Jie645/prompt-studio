@@ -1,0 +1,500 @@
+已备份并清空 C:\Users\Lenovo\WorkBuddy\2026-10-13-18-06-07\PromptStudio-整改包\src\data\profiles.json
+服务就绪：http://127.0.0.1:5190 | 模拟上游：http://127.0.0.1:5199
+
+──────────────────────────────────────────────────────────
+▶ test-api.mjs
+PASS A1    GET / 返回首页 HTML
+PASS A2    GET /js/app.js 返回 JS
+PASS A3    GET /README.md 可访问（页头「使用说明」链接）
+PASS A4    不存在的静态文件返回 404
+PASS A5    路径穿越 /js/../../server.mjs 不泄露源码
+PASS A6    编码路径穿越不泄露系统文件
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+PASS A7    非法编码路径不崩溃（返回 4xx/5xx 而非挂掉）
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+PASS A8    URI 解码异常返回结构化错误
+PASS A9    GET /api/health 返回默认配置
+PASS A10   /api/health 非 GET 被拒
+PASS B1    GET /api/profiles 返回列表结构
+PASS B2    POST 新建接口
+PASS B3    新建接口默认 hasKey=false
+PASS B4    带 apiKey 新建，hasKey=true 且返回掩码
+PASS B5    响应中不含明文密钥
+PASS B6    列表不返回 keyCipher 字段
+PASS B7    列表不含明文密钥
+PASS B8    PATCH 禁用接口
+PASS B9    PATCH 改名且保留密钥
+PASS B10   PATCH apiKey 传空串清除密钥
+PASS B11   清空 temperature 应生效（期望被清掉）
+PASS B12   POST 非法 JSON 返回 400
+PASS B13   PATCH 不存在的 id 返回 404
+PASS B14   DELETE /api/profiles（无 id）返回 405
+PASS B15   超过 2MB 请求体被拒
+PASS B16   DELETE 生效，再删返回 404
+PASS B17   并发 8 次新建后应全部保留
+PASS C1    测试：本地模拟上游连接成功
+PASS C2    测试：上游 401 返回 ok=false 与错误信息
+PASS C3    测试：上游不可达返回 ok=false
+PASS D1    非流式转发：拿到上游文本
+PASS D2    流式转发：SSE 帧完整透传（含 [DONE]）
+PASS D3    转发响应带 x-prompt-studio-source 头
+PASS D4    请求体被适配器改写为 OpenAI messages 结构
+PASS D5    上游实际收到 messages=[system,user] 与 model
+PASS D6    responses 风格打到 /v1/responses 且带 input
+PASS D7    Anthropic 协议：/messages + x-api-key + anthropic-version + system 顶层
+PASS D8    禁用的接口拒绝转发（400）
+PASS D9    转发不存在的 id 返回 404
+PASS D10   缺少 user 字段时上游报错被透传（非崩溃）
+PASS D11   上游 401 原样透传状态码与中文错误
+PASS D12   上游 500（HTML 错误页）被包装为 JSON 错误
+PASS D13   上游返回非 JSON：原样回传不报错
+PASS D14   上游中途断连返回 502 中文提示
+PASS D15   GET /api/relay/:id 返回 405
+PASS D16   遗留 /api/relay（不带 id）可用
+PASS D17   非本地地址且无 Key 时给出中文缺少 Key 提示
+PASS D18   缺少 body 字段返回 400
+PASS E1    中文接口名 + 中文请求体不触发服务崩溃
+PASS E2    服务在处理后仍然存活
+PASS E3    非法 Base URL 给出可读错误而非崩溃
+PASS E4    非法 protocol 回退为 openai
+PASS E5    超长名称被截断到 60 字符
+
+==== 汇总 ====
+总计 53，通过 53，失败 0
+──────────────────────────────────────────────────────────
+▶ test-extra.mjs
+PASS T1    HEAD / 处理正常（不 500）
+PASS T2    OPTIONS /api/profiles 被拒（405）
+PASS T3    缺少 JSON content-type 也能解析（宽松）
+PASS T4    反斜杠路径穿越不泄露源码
+PASS T5    超长 URL 不崩溃
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+[子进程] [prompt-studio] 请求处理失败: URIError: URI malformed
+    at decodeURIComponent (<anonymous>)
+    at serveStatic (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:560:15)
+    at route (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:620:10)
+    at Server.<anonymous> (file:///C:/Users/Lenovo/WorkBuddy/2026-10-13-18-06-07/PromptStudio-%E6%95%B4%E6%94%B9%E5%8C%85/src/server.mjs:625:3)
+    at Server.emit (node:events:519:28)
+    at parserOnIncoming (node:_http_server:1186:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+PASS T6    40 轮坏请求并发后服务仍存活
+PASS T7    客户端中途断开后服务仍存活
+PASS T8    自定义模板：正常内容转发成功
+PASS T9    自定义模板：用户内容含引号/花括号时不应崩（期望友好报错）
+PASS T10   自定义模板语法错误应返回 4xx 而非 500
+PASS T11   Base URL 为空时给出可读错误
+PASS T12   Anthropic 空 URL 会回退到 anthropic.com（可能误报成功/失败，仅记录）
+PASS T13   磁盘文件中不含明文 Key
+PASS T14   磁盘文件中存在密文 scheme 字段
+PASS T15   落盘后无残留 .tmp 文件
+PASS U1    parseJsonLoose：剥 ```json 围栏
+PASS U2    parseJsonLoose：前后夹带文字也能取到
+PASS U3    parseJsonLoose：正文里先出现花括号会解析失败
+PASS U4    extractVariables：支持中文/点/连字符
+PASS U5    extractVariables：不匹配空 {{}}
+PASS U6    自定义模板变量范围与 extractVariables 一致（中文变量可替换）
+PASS U7    estimateTokens：空文本为 0
+PASS U8    estimateTokens：4 个汉字约 4 token（1.05/字后四舍五入）
+PASS U9    离线规则模式：产出结构化提示词
+PASS U10   离线规则模式：关键词命中代码类
+PASS U11   离线规则模式：英文分支
+PASS U12   adapterFor：未知协议回退 openai
+PASS U13   openai.endpoint：baseUrl 已带 /chat/completions 不重复拼接
+PASS U14   openai.endpoint：baseUrl 为空产生站内相对路径（隐患）
+PASS U15   anthropic.body：max_tokens 默认 4096
+PASS U16   openai.responses：json 模式写入 text.format
+PASS U17   anthropic.delta：解析 content_block_delta
+PASS U18   extractUsage：Anthropic 流式 message_delta 能给 outputTokens
+PASS U19   toUpstreamBody：responses 风格 input 结构
+PASS U20   TARGETS/LENGTHS 常量完整
+
+==== 汇总（第二批）====
+总计 35，通过 35，失败 0
+──────────────────────────────────────────────────────────
+▶ test-verify.mjs
+PASS V1    自定义模板（正确填法）可转发成功
+PASS V2    自定义模板变量被替换进请求体
+PASS V3    自定义模板 + 用户内容含双引号（换成 OpenAI 模板则正常）
+PASS V4    HEAD /api/health 也返回 200（未限制方法）
+PASS V5    流式响应带 x-accel-buffering:no（防代理缓冲）
+PASS V6    带 x-prompt-studio-source 头，值为接口 id
+PASS V7    中文接口名回归：响应头仍为 ASCII，服务不崩
+
+第三批：总计 7，通过 7，失败 0
+──────────────────────────────────────────────────────────
+▶ test-front.mjs
+PASS F1    boot 后本地服务被识别为可用
+PASS F2    boot 后完成首次连接（服务状态不报下线）
+PASS F3    表单「保存」能新建接口
+PASS F4    保存后表单被关闭
+PASS F5    「保存并测试」连点两次应只建一条（编辑态未回写）
+PASS F6    「保存并测试」不关闭表单（记录现状）
+PASS F7    接口名做 HTML 转义（防注入）
+PASS F8    列表渲染出接口条目
+PASS F9    默认自动选中第一个启用接口
+PASS F10   切多模型后选中两个
+PASS F11   切回单模型只留一个
+PASS F12   禁用后自动移出选中集合
+PASS F13   剩一个可用时仍保持有选中
+PASS F14   变量页列出全部 {{变量}}
+PASS F15   字数计量器更新
+PASS F16   无接口时走离线规则模式并出文
+PASS F17   离线模式生成后「导出/复制」按钮启用
+PASS F18   离线模式生成后写入历史会话
+PASS F19   离线模式：深度模式的评审/修订阶段标记为跳过
+PASS F20   接入接口后端到端生成成功（流式落字）
+PASS F21   深度模式：评审阶段被标记为完成
+PASS F21b  深度模式：修订阶段被标记为完成
+PASS F21c  分析阶段拿到结构化的解析结果（走通 JSON 解析）
+PASS F22   深度模式：自评徽标显示且含轮次
+PASS F23   深度模式：命中「收益不足 0.3 分」停止规则
+PASS F24   保留最高分版本：回退到第 1 轮（撰写版）
+PASS F25   回退时给出中文提示（会被下一条 log 立刻覆盖）
+PASS F26   自评徽标应与「展示的版本」一致（回退后仍显示最差一轮 6.0 = 不一致）
+PASS F27   自评徽标悬停提示含待改问题
+PASS F28   多模型模式：生成两个模型的选项卡
+PASS F29   多模型模式：编辑器被隐藏、正文区可见
+PASS F31   沟通阶段：AI 提出关键问题
+PASS F32   沟通阶段：展示已收集信息快照
+PASS F33   沟通阶段：轮次计数更新
+PASS F34   沟通阶段不触发生成（编辑器仍为空）
+PASS F35   回答框与生成动作区出现
+PASS F39   沟通用模型下拉已填充接口
+PASS F36   回答后进入下一轮
+PASS F37   沟通记录里出现用户回答气泡
+PASS F38   点「生成提示词」后才产出内容
+PASS F40   「重新开始」清空本次沟通
+PASS F30   清空需求会清掉当前沟通状态
+
+==== 前端交互汇总 ====
+总计 42，通过 42，失败 0
+──────────────────────────────────────────────────────────
+跑完了。请对照 01-整改任务书.md 第五节的验收标准判断。
+还有 B2 / B3 专项要跑（单独跑，不要和本脚本同时进行）：
+    node tests/test-regressions.mjs
+已还原 C:\Users\Lenovo\WorkBuddy\2026-10-13-18-06-07\PromptStudio-整改包\src\data\profiles.json
