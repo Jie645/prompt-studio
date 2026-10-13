@@ -1,0 +1,35 @@
+# 把 src/public 作为静态站点发布到 GitHub Pages
+#
+# 注意：Pages 上只能跑「纯前端」部分 —— 也就是内置的离线规则模式。
+# 需要本地服务的能力（模型接口管理 / 调用模型生成 / 沟通提问）必须在你自己机器上
+# 双击 run.cmd 运行，页面上会明确提示「本地服务已断开」。
+name: Deploy static demo to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: src/public
+      - id: deployment
+        uses: actions/deploy-pages@v4
