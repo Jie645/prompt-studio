@@ -11,6 +11,9 @@ const $ = (sel) => document.querySelector(sel);
 
 const DIRECT = location.protocol === "file:";
 
+/* GitHub Pages 这类纯静态托管：没有本地服务，直接按离线规则模式走，不发无效请求（控制台零 404） */
+const STATIC_HOST = /\.github\.io$/.test(location.hostname);
+
 /* 单栏对话式：消息流是否还在「跟随底部」（用户上滚时暂停自动跟随） */
 let followBottom = true;
 let trayTimer = 0;
@@ -1812,7 +1815,14 @@ function loadSession(id) {
 }
 
 async function pingServer(manual) {
-  if (DIRECT) { state.serverAlive = false; updateModeChip(); return false; }
+  if (DIRECT || STATIC_HOST) {
+    state.serverAlive = false;
+    updateModeChip();
+    if (manual && STATIC_HOST) {
+      log("这是静态演示站点：模型接口管理与调用要在你自己机器上运行 run.cmd，再访问 http://127.0.0.1:5178。", "error");
+    }
+    return false;
+  }
   const wasAlive = state.serverAlive;
   try {
     const resp = await fetch("/api/health", { cache: "no-store" });
