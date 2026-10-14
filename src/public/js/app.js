@@ -5,11 +5,16 @@ import {
   localEnhance, parseJsonLoose, extractVariables, estimateTokens,
 } from "./prompt-engine.mjs";
 import { extractDelta, extractText, extractUsage } from "./adapters.mjs";
-import { initProfiles, loadProfiles, profileState, renderProfiles, selectedProfiles, setMode } from "./profiles.js";
+import { initProfiles, loadProfiles, profileState, renderProfiles, selectedProfiles, setMode, pickProfile, testProfile, closeForm } from "./profiles.js";
 
 const $ = (sel) => document.querySelector(sel);
 
 const DIRECT = location.protocol === "file:";
+
+/* 单栏对话式：消息流是否还在「跟随底部」（用户上滚时暂停自动跟随） */
+let followBottom = true;
+let trayTimer = 0;
+let popTimer = 0;
 
 const state = {
   target: "general",     // 目标运行时已从界面移除，固定为通用助手
@@ -88,6 +93,18 @@ function syncLengthSelect() {
   sel.innerHTML = LENGTHS.map((l) => '<option value="' + l.id + '">' + l.label + " · " + l.words + "</option>").join("");
   sel.value = state.length;
   $("#lengthNote").textContent = (LENGTHS.find((l) => l.id === state.length) || LENGTHS[1]).note;
+  // 托盘里的「详细程度」做成分段控件（暴露的分段 UI，状态跟随 state.length）
+  const group = $("#lengthGroup");
+  if (group) {
+    group.innerHTML = LENGTHS.map((l) =>
+      '<button type="button" data-length="' + l.id + '" aria-pressed="' + (l.id === state.length) + '">' + l.label + "</button>").join("");
+    for (const btn of group.querySelectorAll("button")) {
+      btn.addEventListener("click", () => {
+        state.length = btn.dataset.length;
+        syncLengthSelect();
+      });
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -173,7 +190,7 @@ async function readStream(resp, onDelta, profile, collector) {
 /** 一次模型调用：profile 决定协议与上游地址，其余与原来一致 */
 async function runCall(call, onDelta, profile, collector) {
   const target = profile || selectedProfiles()[0];
-  if (!target) throw new Error("还没有可用的模型接口。请在左侧「模型接口」里新增一个（或启用已有的）。");
+  if (!target) throw new Error("还没有可用的模型接口。请在「＋ 功能 → 模型」里新增一个（或启用已有的）。");
   const resp = await relay(target, {
     system: call.system,
     user: call.user,
@@ -210,18 +227,33 @@ function setPrompt(text) {
   state.prompt = text;
   const editor = $("#promptOut");
   if (editor.value !== text) editor.value = text;
-  $("#meter").textContent = text.length + " 字 · ~" + estimateTokens(text) + " tokens";
+  syncMeter(text);
   renderVars();
   applyView();
+  scrollStream();
+}
+
+/** 计量：输入卡底部 + 结果卡片脚注各一份（同一份数字，两处显示） */
+function syncMeter(text) {
+  const label = text.length + " 字 · ~" + estimateTokens(text) + " tokens";
+  const meter = $("#meter");
+  if (meter) meter.textContent = label;
+  const echo = $("#meterEcho");
+  if (echo) echo.textContent = label;
 }
 
 async function typewriter(text, apply) {
   const step = Math.max(6, Math.round(text.length / 60));
-  for (let i = 0; i < text.length; i += step) {
-    apply(text.slice(0, i + step));
-    await tick(18);
+  document.body.classList.add("is-typing");
+  try {
+    for (let i = 0; i < text.length; i += step) {
+      apply(text.slice(0, i + step));
+      await tick(18);
+    }
+    apply(text);
+  } finally {
+    document.body.classList.remove("is-typing");
   }
-  apply(text);
 }
 
 function hasKey() {
@@ -236,7 +268,7 @@ async function generate() {
   if (state.running) return;
   const raw = $("#raw").value.trim();
   if (!raw) {
-    log("先在「你的需求」里写一句话。", "error");
+    log("先在下面的输入框里写一句话。", "error");
     $("#raw").focus();
     return;
   }
@@ -252,6 +284,9 @@ async function generate() {
   // 没选接口时不报错，退回内置规则模式（离线也能把结构搭出来）
   const online = picked.length > 0;
   state.running = true;
+  document.body.classList.add("is-generating");
+  const sendBtn = $("#sendBtn");
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "生成中…"; }
   state.prompt = "";
   state.analysis = null;
   state.critique = null;
@@ -268,6 +303,7 @@ async function generate() {
   showTab("prompt");
   saveJson("prompt-studio.draft.v1", input);
   setCompareVisible(compare);
+  scrollStream(true);
 
   try {
     if (compare) {
@@ -365,7 +401,10 @@ async function generate() {
     log((err && err.message) || String(err), "error");
   } finally {
     state.running = false;
-    }
+    document.body.classList.remove("is-generating");
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "发送"; }
+    applyView();
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -573,13 +612,13 @@ function chatProfile() {
 async function startChat() {
   const input = chatInputSnapshot();
   if (!input.raw) {
-    log("先在「你的需求」里写一句话。", "error");
+    log("先在下面的输入框里写一句话。", "error");
     showTab("chat");
     $("#raw").focus();
     return;
   }
   if (!profileState.list.length) {
-    log("先在左侧「模型接口」里加一个模型（或点「跳过沟通，直接生成」用内置规则模式）。", "error");
+    log("先在「＋ 功能 → 模型」里加一个接口（或用「跳过沟通，直接生成」走内置规则模式）。", "error");
     return;
   }
   const meta = readMeta();
@@ -703,11 +742,12 @@ function renderChat() {
   $("#chatRestart").hidden = !chat;
 
   if (!chat) {
-    logEl.innerHTML = '<div class="chat-empty">点左边「开始沟通」，我会先问清几个最关键的问题；' +
-      "信息够了再点「生成提示词」，那时候才会真正调用模型写作。沟通阶段不消耗生成动作。</div>";
+    logEl.innerHTML = '<div class="chat-empty">在下方输入框写一句话，回车即可开始沟通——我会先问清几个最关键的问题；' +
+      "信息够了再点「生成提示词」，那时候才真正调用模型写作。沟通阶段不消耗生成动作。</div>";
     factsEl.hidden = true;
     inputWrap.hidden = true;
     actions.hidden = true;
+    scrollStream();
     return;
   }
 
@@ -734,6 +774,7 @@ function renderChat() {
     ? "信息已收集完毕，可以点击生成"
     : (chat.status === "generating" ? "正在生成提示词…" : "还差一点也没关系，可以直接生成");
   $("#chatGenerate").textContent = chat.status === "generating" ? "生成中…" : "生成提示词";
+  scrollStream();
 }
 
 /* ------------------------------------------------------------------ */
@@ -778,21 +819,19 @@ async function generateCompare(input, picked) {
   state.rounds = [];
   renderScoreChip();
   const done = modelState.cols.filter((c) => c.status === "done").length;
-  log("完成：" + done + "/" + picked.length + " 个模型成功。点上面的模型名切换查看，或点「用这版」把它设为主版本。", done === picked.length ? "ok" : "error");
+  log("完成：" + done + "/" + picked.length + " 个模型成功。每列卡片底部可以「用这版 / 复制这版」。", done === picked.length ? "ok" : "error");
 }
 
 async function runModelColumn(profile, index, call) {
   const col = modelState.cols[index];
   col.status = "running";
   col.startedAt = Date.now();
-  renderModelTabs();
+  updateModelTab(index);
   try {
     col.text = await runCall(call, (full) => {
       modelState.cols[index].text = full;
-      if (index === modelState.active) {
-        const body = $("#modelBody");
-        if (body) body.textContent = full;
-      }
+      setColumnText(index, full);
+      scrollStream();
     }, profile, col);
     col.status = "done";
   } catch (err) {
@@ -816,44 +855,103 @@ function metaText(c) {
   return parts.join(" · ");
 }
 
-/** 多模型：选项卡切换查看，不并排 */
+/** 多模型对比：并排结果卡片（每列独立流式），不再用标签页切换 */
+function columnHtml(c, i) {
+  const active = i === modelState.active ? ' data-active="true"' : "";
+  const body = c.status === "error"
+    ? escapeHtml(c.error || "调用失败")
+    : escapeHtml(c.text || (c.status === "pending" ? "排队中…" : ""));
+  return '<article class="model-tab" data-index="' + i + '" data-state="' + c.status + '"' + active + '>' +
+    '<div class="model-tab-head">' +
+      '<span class="model-tab-name" title="' + escapeHtml(c.profile.name) + '">' + escapeHtml(c.profile.name) + "</span>" +
+      '<span class="model-tab-meta">' + escapeHtml(metaText(c)) + "</span>" +
+      '<span class="model-tab-actions">' +
+        '<button type="button" class="ghost tiny" data-col-act="copy" aria-label="复制这版">复制</button>' +
+        '<button type="button" class="ghost tiny" data-col-act="use" aria-label="用这版">用这版</button>' +
+      "</span>" +
+    "</div>" +
+    '<pre class="model-tab-text">' + body + "</pre>" +
+  "</article>";
+}
+
 function renderModelTabs() {
   const tabs = $("#modelTabs");
-  const body = $("#modelBody");
+  if (!tabs) return;
   if (!modelState.cols.length) {
     tabs.innerHTML = "";
-    body.textContent = "";
     return;
   }
-  tabs.innerHTML = modelState.cols.map((c, i) =>
-    '<button type="button" class="model-tab" data-index="' + i + '" data-state="' + c.status + '" aria-pressed="' + (i === modelState.active) + '">' +
-      '<span class="model-tab-name">' + escapeHtml(c.profile.name) + "</span>" +
-      '<span class="model-tab-meta">' + escapeHtml(metaText(c)) + "</span>" +
-    "</button>").join("");
-  for (const btn of tabs.querySelectorAll(".model-tab")) {
-    btn.addEventListener("click", () => {
-      modelState.active = Number(btn.dataset.index);
-      renderModelTabs();
+  tabs.innerHTML = modelState.cols.map((c, i) => columnHtml(c, i)).join("");
+  for (const card of tabs.querySelectorAll(".model-tab")) {
+    card.addEventListener("click", (e) => {
+      if (e.target && e.target.closest && e.target.closest("button")) return;   // 按钮由下面的监听处理
+      modelState.active = Number(card.dataset.index);
+      syncModelFocus();
     });
   }
+  for (const btn of tabs.querySelectorAll("button[data-col-act]")) {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const card = btn.closest(".model-tab");
+      const index = card ? Number(card.dataset.index) : 0;
+      modelState.active = index;
+      syncModelFocus();
+      if (btn.dataset.colAct === "use") useColumn(index);
+      else copyColumn(index);
+    });
+  }
+  syncModelFocus();
+}
+
+/** 聚焦某列：只改属性，不重建 DOM（重建会打断正在进行的流式写入） */
+function syncModelFocus() {
+  const tabs = $("#modelTabs");
+  if (tabs) {
+    for (const card of tabs.querySelectorAll(".model-tab")) {
+      if (Number(card.dataset.index) === modelState.active) card.dataset.active = "true";
+      else delete card.dataset.active;
+    }
+  }
   const c = modelState.cols[modelState.active];
-  body.dataset.state = c.status;
-  body.textContent = c.status === "error"
-    ? (c.error || "调用失败")
-    : (c.text || (c.status === "pending" ? "排队中…" : ""));
-  $("#modelUse").disabled = !c.text;
-  $("#modelCopy").disabled = !c.text;
+  const useBtn = $("#modelUse");
+  if (useBtn) useBtn.disabled = !(c && c.text);
+  const copyBtn = $("#modelCopy");
+  if (copyBtn) copyBtn.disabled = !(c && c.text);
+}
+
+/** 流式写入某一列的正文节点 */
+function setColumnText(index, full) {
+  const node = document.querySelector('#modelTabs .model-tab[data-index="' + index + '"] .model-tab-text');
+  if (node) node.textContent = full;
 }
 
 function updateModelTab(index) {
   const c = modelState.cols[index];
-  const btn = document.querySelector('#modelTabs .model-tab[data-index="' + index + '"]');
-  if (btn) {
-    btn.dataset.state = c.status;
-    const meta = btn.querySelector(".model-tab-meta");
+  if (!c) return;
+  const card = document.querySelector('#modelTabs .model-tab[data-index="' + index + '"]');
+  if (card) {
+    card.dataset.state = c.status;
+    const meta = card.querySelector(".model-tab-meta");
     if (meta) meta.textContent = metaText(c);
+    if (c.status === "error") setColumnText(index, c.error || "调用失败");
   }
-  if (index === modelState.active) renderModelTabs();
+  if (index === modelState.active) syncModelFocus();
+}
+
+/** 把某一列设为主版本 */
+function useColumn(index) {
+  const c = modelState.cols[index];
+  if (!c || !c.text) return;
+  state.prompt = c.text;
+  setPrompt(c.text);
+  log("已把「" + c.profile.name + "」设为主版本，切到「单模型」或直接用「变量」继续处理。", "ok");
+}
+
+/** 复制某一列 */
+async function copyColumn(index) {
+  const c = modelState.cols[index];
+  const ok = await copyText(c ? c.text : "");
+  log(ok ? "已复制「" + (c ? c.profile.name : "") + "」的版本。" : "浏览器拒绝了自动复制。", ok ? "ok" : "error");
 }
 
 /* ------------------------------------------------------------------ */
@@ -871,6 +969,8 @@ function list(items) {
 
 function renderAnalysis(analysis) {
   const host = $("#analysisOut");
+  const panel = $("#analysisPanel");
+  if (panel) panel.hidden = !analysis;          // 折叠卡片：没有解析结果时整体收起
   if (!analysis) {
     host.innerHTML = '<p class="placeholder">还没有解析结果。</p>';
     return;
@@ -1006,21 +1106,24 @@ function schedulePreviewRender() {
 }
 
 function applyView(options) {
-  // 多模型模式：显示「模型选项卡 + 当前模型正文」，不再并排
+  // 多模型模式：显示并排结果卡片；单模型模式：显示可编辑结果卡片
   const multi = profileState.mode === "compare" && modelState.cols.length > 0;
   const switchEl = $("#modelSwitch");
   const bodyEl = $("#modelBody");
   if (switchEl) switchEl.hidden = !multi;
   if (bodyEl) bodyEl.hidden = !multi;
+  document.body.classList.toggle("is-comparing", multi);
   if (multi) {
     $("#editorShell").hidden = true;
     $("#emptyState").hidden = true;
+    document.body.classList.add("has-result");
     return;
   }
   const hasText = Boolean((state.prompt || "").trim());
   const shell = $("#editorShell");
   $("#emptyState").hidden = hasText;
   if (shell) shell.hidden = !hasText;
+  document.body.classList.toggle("has-result", hasText || state.running);
   if (!hasText) return;
   if (options && options.immediate) {
     clearTimeout(previewTimer);
@@ -1073,25 +1176,37 @@ function updateModeChip() {
   const retry = $("#retryServer");
   const picked = selectedProfiles();
   const enabled = profileState.list.filter((p) => p.enabled).length;
+  // 输入卡顶部的模型 chip：显示当前选中的接口名（点开二级菜单可换）
+  const chipBtn = $("#modelChipBtn");
+  const chipName = $("#modelChipName");
+  const setChipLabel = (label, chipState) => {
+    if (chipName) chipName.textContent = label;
+    if (chipBtn) chipBtn.dataset.state = chipState;
+  };
 
   if (!DIRECT && !state.serverAlive) {
     chip.textContent = "本地服务已断开";
     chip.dataset.state = "down";
     retry.hidden = false;
+    setChipLabel(picked.length ? picked.map((p) => p.name).join(" + ") : "未选择模型", "down");
   } else {
     retry.hidden = true;
     if (DIRECT || !profileState.available) {
       chip.textContent = "需要本地服务";
       chip.dataset.state = "offline";
+      setChipLabel("离线规则模式", "offline");
     } else if (profileState.mode === "compare") {
       chip.textContent = "对比 " + picked.length + " 个模型";
       chip.dataset.state = picked.length >= 2 ? "online" : "offline";
+      setChipLabel(picked.length ? "对比 " + picked.length + " 个模型" : "未选择模型", picked.length >= 2 ? "online" : "offline");
     } else if (picked.length) {
       chip.textContent = picked[0].name;
       chip.dataset.state = "online";
+      setChipLabel(picked[0].name, "busy");
     } else {
       chip.textContent = "未选择模型";
       chip.dataset.state = enabled ? "offline" : "offline";
+      setChipLabel("未选择模型", "offline");
     }
   }
   const note = $("#apiNote");
@@ -1109,11 +1224,266 @@ function updateModeChip() {
 /* boot                                                                */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* 单栏对话式：消息流跟随 / 托盘 / 模型浮层 / 模态 / 杂项                  */
+/* ------------------------------------------------------------------ */
+
+/** 输入框 1~8 行自动增高 */
+function autogrow(el) {
+  if (!el || !el.style) return;
+  const maxRows = 8;
+  const lh = 23;                                   // 与 CSS line-height 对齐的近似值
+  const max = maxRows * lh + 18;
+  el.style.height = "auto";
+  const h = Math.min(el.scrollHeight || 0, max);
+  el.style.height = Math.max(34, h) + "px";
+}
+
+/** 新内容追加到底部并自动滚到底；用户手动上滚时暂停跟随 */
+function scrollStream(force) {
+  const box = $("#sheet");
+  if (!box) return;
+  if (force || followBottom) box.scrollTop = box.scrollHeight || 0;
+  const btn = $("#jumpBottom");
+  if (btn) {
+    const gap = (box.scrollHeight || 0) - (box.scrollTop || 0) - (box.clientHeight || 0);
+    btn.hidden = !(gap > 120);
+  }
+}
+
+function initStreamFollow() {
+  const box = $("#sheet");
+  const btn = $("#jumpBottom");
+  if (btn) btn.addEventListener("click", () => { followBottom = true; scrollStream(true); });
+  if (!box || !box.addEventListener) return;
+  box.addEventListener("scroll", () => {
+    const gap = (box.scrollHeight || 0) - (box.scrollTop || 0) - (box.clientHeight || 0);
+    followBottom = gap < 120;
+    if (btn) btn.hidden = followBottom;
+  });
+}
+
+/** 复制当前提示词（结果卡片与托盘输出操作共用） */
+async function doCopyPrompt() {
+  if (!state.prompt) {
+    log("还没有可复制的提示词。", "error");
+    return;
+  }
+  const btn = $("#copyPrompt");
+  const ok = await copyText(state.prompt);
+  if (ok) {
+    log("提示词已复制到剪贴板。", "ok");
+    if (btn) {
+      btn.textContent = "已复制";
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = "复制"; btn.disabled = false; }, 1600);
+    }
+  } else {
+    const editor = $("#promptOut");
+    if (editor) { editor.focus(); editor.select(); }
+    log("浏览器拒绝了自动复制，已帮你全选内容，按 Ctrl / ⌘ + C 复制。", "error");
+  }
+}
+
+/** 清空这次对话：沟通记录、生成结果、解析、变量全部复位 */
+function clearConversation() {
+  state.chat = null;
+  state.activeChat = null;
+  state.critique = null;
+  state.rounds = [];
+  state.stopReason = "";
+  state.varValues = {};
+  state.prompt = "";
+  setCompareVisible(false);
+  setPrompt("");
+  renderChat();
+  renderScoreChip();
+  renderAnalysis(null);
+  setPromptActions(false);
+  resetStages(false);
+  log("已清空对话，可以重新开始。", "");
+}
+
+/** 测试当前选中的接口（托盘与浮层共用入口） */
+function testSelectedProfile() {
+  const p = selectedProfiles()[0];
+  if (!p) {
+    log("先选中一个模型接口，再测试连接。", "error");
+    return;
+  }
+  testProfile(p.id);
+}
+
+/** 编辑 / 预览切换（结果卡片右上角） */
+function togglePreviewView() {
+  const shell = $("#editorShell");
+  if (!shell) return;
+  const next = shell.dataset.view === "preview" ? "edit" : "preview";
+  shell.dataset.view = next;
+  const btn = $("#togglePreview");
+  if (btn) {
+    btn.textContent = next === "preview" ? "编辑" : "预览";
+    btn.setAttribute("aria-pressed", String(next === "preview"));
+  }
+  if (next === "preview") renderPreview();
+}
+
+/* ---------- 上拉功能菜单 ---------- */
+
+function syncTrayAria(open) {
+  const toggle = $("#trayToggle");
+  if (toggle) toggle.setAttribute("aria-expanded", String(open));
+}
+
+function openTray() {
+  const tray = $("#tray");
+  if (!tray) return;
+  clearTimeout(trayTimer);
+  closePop();
+  tray.hidden = false;
+  tray.dataset.state = "open";
+  syncTrayAria(true);
+}
+
+function closeTray(returnFocus) {
+  const tray = $("#tray");
+  if (!tray || tray.hidden) { syncTrayAria(false); return; }
+  clearTimeout(trayTimer);
+  tray.dataset.state = "closing";
+  trayTimer = setTimeout(() => {
+    tray.hidden = true;
+    tray.dataset.state = "";
+  }, 170);
+  syncTrayAria(false);
+  if (returnFocus) {
+    const toggle = $("#trayToggle");
+    if (toggle) toggle.focus();
+  }
+}
+
+function toggleTray() {
+  const tray = $("#tray");
+  if (!tray) return;
+  if (tray.hidden || tray.dataset.state === "closing") openTray();
+  else closeTray(true);
+}
+
+/** 托盘内 ↑/↓ 在可操作项之间移动焦点 */
+function trayArrowNav(e) {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  const tray = $("#tray");
+  if (!tray || tray.hidden) return;
+  const items = [];
+  for (const el of tray.querySelectorAll("button, select, input, [tabindex]")) {
+    if (el.disabled) continue;
+    if (el.offsetParent === null) continue;
+    items.push(el);
+  }
+  if (!items.length) return;
+  const at = items.indexOf(document.activeElement);
+  const step = e.key === "ArrowDown" ? 1 : -1;
+  const next = at < 0 ? 0 : (at + step + items.length) % items.length;
+  items[next].focus();
+  e.preventDefault();
+}
+
+/* ---------- 模型浮层（输入卡模型 chip 的二级菜单） ---------- */
+
+function renderModelPop() {
+  const host = $("#modelPopList");
+  if (!host) return;
+  const usable = profileState.list.filter((p) => p.enabled);
+  if (!usable.length) {
+    host.innerHTML = '<p class="placeholder">还没有接口，点「＋ 新增」添加第一个模型。</p>';
+    return;
+  }
+  host.innerHTML = usable.map((p) =>
+    '<button type="button" class="pop-chip" data-pop-id="' + p.id + '" aria-pressed="' + profileState.selected.has(p.id) + '">' +
+    escapeHtml(p.name) + "</button>").join("");
+  for (const btn of host.querySelectorAll(".pop-chip")) {
+    btn.addEventListener("click", () => pickProfile(btn.dataset.popId));
+  }
+}
+
+function openPop() {
+  const pop = $("#modelPop");
+  if (!pop) return;
+  clearTimeout(popTimer);
+  closeTray();
+  renderModelPop();
+  pop.hidden = false;
+  pop.dataset.state = "open";
+  const chip = $("#modelChipBtn");
+  if (chip) chip.setAttribute("aria-expanded", "true");
+}
+
+function closePop() {
+  const pop = $("#modelPop");
+  if (!pop || pop.hidden) return;
+  clearTimeout(popTimer);
+  pop.dataset.state = "closing";
+  popTimer = setTimeout(() => {
+    pop.hidden = true;
+    pop.dataset.state = "";
+  }, 160);
+  const chip = $("#modelChipBtn");
+  if (chip) chip.setAttribute("aria-expanded", "false");
+}
+
+function togglePop() {
+  const pop = $("#modelPop");
+  if (!pop) return;
+  if (pop.hidden || pop.dataset.state === "closing") openPop();
+  else closePop();
+}
+
+/* ---------- 模态对话框（元提示词 / 历史会话） ---------- */
+
+let lastModalFocus = null;
+
+function openModal(sel) {
+  const modal = $(sel);
+  if (!modal) return;
+  lastModalFocus = document.activeElement;
+  closeTray();
+  closePop();
+  modal.hidden = false;
+  const first = modal.querySelector("input, textarea, select, button");
+  if (first) first.focus();
+}
+
+function closeModal(sel) {
+  const modal = $(sel);
+  if (!modal) return;
+  modal.hidden = true;
+  if (lastModalFocus && lastModalFocus.focus) lastModalFocus.focus();
+  lastModalFocus = null;
+}
+
+/** 当前可见的模态（Esc / 点击遮罩时要逐层退出） */
+function visibleModal() {
+  for (const id of ["#profileForm", "#metaPanel", "#historyPanel"]) {
+    const el = $(id);
+    if (el && !el.hidden) return id;
+  }
+  return "";
+}
+
+function closeVisibleModal() {
+  const id = visibleModal();
+  if (!id) return;
+  if (id === "#profileForm") closeForm();       // 接口表单由 profiles.js 管理开合
+  else closeModal(id);
+}
+
 function bindEvents() {
   $("#composer").addEventListener("submit", (e) => { e.preventDefault(); startChat(); });
 
+  // 输入卡：Enter 或 Ctrl/⌘+Enter 发送；Shift+Enter 换行
   $("#raw").addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); startChat(); }
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+    e.preventDefault();
+    startChat();
   });
   $("#lengthSel").addEventListener("change", (e) => {
     state.length = e.target.value;
@@ -1127,31 +1497,31 @@ function bindEvents() {
   }
 
   $("#expandEditor").addEventListener("click", () => toggleFullscreen());
+
+  // 全局快捷键：Esc 逐层退出（全屏 → 模态 → 模型浮层 → 功能菜单）；
+  // Ctrl/⌘ + / 开合功能菜单；在模态里 Tab 不跑出模态。
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && $("#editorShell").classList.contains("is-fullscreen")) toggleFullscreen(false);
+    if (e.key === "Escape") {
+      if ($("#editorShell").classList.contains("is-fullscreen")) { toggleFullscreen(false); return; }
+      if (visibleModal()) { closeVisibleModal(); return; }
+      if (!$("#modelPop").hidden) { closePop(); return; }
+      if (!$("#tray").hidden) { closeTray(true); return; }
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === "/") {
+      e.preventDefault();
+      toggleTray();
+      return;
+    }
+    if (e.key === "Tab" && visibleModal()) trapModalTab(e);
   });
 
-  $("#copyPrompt").addEventListener("click", async () => {
-    if (!state.prompt) return;
-    const btn = $("#copyPrompt");
-    const ok = await copyText(state.prompt);
-    if (ok) {
-      btn.textContent = "已复制";
-      btn.disabled = true;
-      log("提示词已复制到剪贴板。", "ok");
-      setTimeout(() => { btn.textContent = "复制"; btn.disabled = false; }, 1600);
-    } else {
-      const editor = $("#promptOut");
-      editor.focus();
-      editor.select();
-      log("浏览器拒绝了自动复制，已帮你全选内容，按 Ctrl / ⌘ + C 复制。", "error");
-    }
-  });
+  $("#copyPrompt").addEventListener("click", () => doCopyPrompt());
 
   const editor = $("#promptOut");
   editor.addEventListener("input", (e) => {
     state.prompt = e.target.value;
-    $("#meter").textContent = state.prompt.length + " 字 · ~" + estimateTokens(state.prompt) + " tokens";
+    syncMeter(state.prompt);
     renderVars();
     applyView();
   });
@@ -1197,6 +1567,7 @@ function bindEvents() {
   const raw = $("#raw");
   let rawHadText = raw.value.trim().length > 0;
   raw.addEventListener("input", () => {
+    autogrow(raw);                       // 输入框 1~8 行自动增高
     const hasText = raw.value.trim().length > 0;
     if (hasText) { rawHadText = true; return; }
     if (rawHadText) {
@@ -1209,22 +1580,13 @@ function bindEvents() {
 
   $("#retryServer").addEventListener("click", () => pingServer(true));
   $("#exportPrompt").addEventListener("click", () => exportPrompt());
-  $("#modelUse").addEventListener("click", () => {
-    const c = modelState.cols[modelState.active];
-    if (!c || !c.text) return;
-    state.prompt = c.text;
-    setPrompt(c.text);
-    log("已把「" + c.profile.name + "」设为主版本，切到「单模型」或直接用「变量」继续处理。", "ok");
-  });
-  $("#modelCopy").addEventListener("click", async () => {
-    const c = modelState.cols[modelState.active];
-    const ok = await copyText(c ? c.text : "");
-    log(ok ? "已复制「" + (c ? c.profile.name : "") + "」的版本。" : "浏览器拒绝了自动复制。", ok ? "ok" : "error");
-  });
+  $("#modelUse").addEventListener("click", () => useColumn(modelState.active));
+  $("#modelCopy").addEventListener("click", () => copyColumn(modelState.active));
 
   // ---- 沟通 ----
-  $("#startChat").addEventListener("click", () => startChat());
+  $("#startChat").addEventListener("click", () => { closeTray(); startChat(); });
   $("#skipChat").addEventListener("click", () => {
+    closeTray();
     state.activeChat = null;
     showTab("prompt");
     generate();
@@ -1286,6 +1648,72 @@ function bindEvents() {
     }
     loadSession(id);
   });
+
+  // ---- 单栏对话式：托盘 / 模型浮层 / 输出操作 / 模态 / 日志条 ----
+  $("#trayToggle").addEventListener("click", () => toggleTray());
+  $("#trayClose").addEventListener("click", () => closeTray(true));
+  $("#tray").addEventListener("keydown", trayArrowNav);
+  $("#modelChipBtn").addEventListener("click", () => togglePop());
+  $("#testSelected").addEventListener("click", () => testSelectedProfile());
+  $("#togglePreview").addEventListener("click", () => togglePreviewView());
+
+  // 空状态示例：点一下填进输入框
+  for (const btn of document.querySelectorAll("#examples button[data-example]")) {
+    btn.addEventListener("click", () => {
+      const raw = $("#raw");
+      raw.value = btn.dataset.example;
+      raw.focus();
+      autogrow(raw);
+    });
+  }
+
+  // 托盘「输出操作」：全屏 / 复制 / 导出 / 清空
+  for (const btn of document.querySelectorAll("#tray [data-act]")) {
+    btn.addEventListener("click", () => {
+      const act = btn.dataset.act;
+      if (act === "expand") toggleFullscreen();
+      else if (act === "copy") doCopyPrompt();
+      else if (act === "export") exportPrompt();
+      else if (act === "clear") clearConversation();
+    });
+  }
+
+  // 进阶入口：元提示词模板 / 历史会话（模态承载）
+  $("#openMeta").addEventListener("click", () => openModal("#metaPanel"));
+  $("#openHistory").addEventListener("click", () => openModal("#historyPanel"));
+  $("#metaClose").addEventListener("click", () => closeModal("#metaPanel"));
+  $("#historyClose").addEventListener("click", () => closeModal("#historyPanel"));
+  for (const id of ["#profileForm", "#metaPanel", "#historyPanel"]) {
+    const el = $(id);
+    if (el) el.addEventListener("click", (e) => {
+      if (e.target !== el) return;                 // 只处理"点遮罩空白处"
+      if (id === "#profileForm") closeForm();
+      else closeModal(id);
+    });
+  }
+
+  // data-click 代理：任何带 data-click="#x" 的按钮，等价于点那个按钮
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    const proxy = t && t.closest ? t.closest("[data-click]") : null;
+    if (proxy) {
+      const target = $(proxy.dataset.click);
+      if (target && !target.disabled) target.click();
+      closePop();
+      return;
+    }
+    // 点面板外部：关闭托盘 / 模型浮层
+    const tray = $("#tray");
+    if (tray && !tray.hidden && t && t.closest && !t.closest("#tray") && !t.closest("#trayToggle")) closeTray();
+    const pop = $("#modelPop");
+    if (pop && !pop.hidden && t && t.closest && !t.closest("#modelPop") && !t.closest("#modelChipBtn")) closePop();
+  });
+
+  // 底部状态条：点一下展开为可滚动日志面板
+  $("#logBar").addEventListener("click", () => {
+    const bar = $("#logBar");
+    bar.dataset.open = bar.dataset.open === "true" ? "false" : "true";
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1297,6 +1725,8 @@ function fillMeta() {
   $("#metaAsk").value = m.ask || ASK_SYSTEM;
   $("#metaCompose").value = m.compose || COMPOSE_SYSTEM;
   $("#metaState").textContent = (m.ask || m.compose) ? "已自定义" : "默认";
+  const trayHint = $("#metaTrayHint");
+  if (trayHint) trayHint.textContent = (m.ask || m.compose) ? "2 套 · 已自定义" : "2 套 · 默认";
   const chat = state.chat;
   if (chat) { chat.metaAsk = m.ask; chat.metaCompose = m.compose; }
 }
@@ -1335,6 +1765,8 @@ function saveSession() {
 function renderSessions() {
   const host = $("#sessionList");
   $("#historyCount").textContent = state.sessions.length + " 条";
+  const trayBadge = $("#trayHistoryCount");
+  if (trayBadge) trayBadge.textContent = state.sessions.length + " 条 · 可载入或删除";
   if (!state.sessions.length) {
     host.innerHTML = '<p class="placeholder">还没有会话。沟通 + 生成之后会自动存一条，这里可以回看。</p>';
     return;
@@ -1356,6 +1788,7 @@ function loadSession(id) {
   const x = state.sessions.find((v) => v.id === id);
   if (!x) return;
   $("#raw").value = x.requirement || "";
+  autogrow($("#raw"));
   state.target = x.target || state.target;
   state.length = x.length || state.length;
   state.language = x.language || state.language;
@@ -1415,18 +1848,20 @@ async function pingServer(manual) {
 async function boot() {
   initProfiles({
     log,
-    onChange: () => { updateModeChip(); renderChatModelOptions(); applyView(); },
+    onChange: () => { updateModeChip(); renderChatModelOptions(); renderModelPop(); applyView(); },
   });
 
   const draft = loadJson("prompt-studio.draft.v1", null);
   if (draft) {
     $("#raw").value = draft.raw || "";
+    autogrow($("#raw"));
     state.length = draft.length || state.length;
   }
 
   syncLengthSelect();
 
   bindEvents();
+  initStreamFollow();
   renderVars();
   resetStages(false);
   applyView();
@@ -1434,6 +1869,7 @@ async function boot() {
   await pingServer(false);
   if (!DIRECT && state.serverAlive) await loadProfiles();
   renderProfiles();
+  renderModelPop();
   updateModeChip();
   setInterval(() => { if (!state.serverAlive) pingServer(false); }, 8000);
 

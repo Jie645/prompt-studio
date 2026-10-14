@@ -170,7 +170,8 @@ function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function pickProfile(id) {
+/** 选中某个接口（单模型替换选中；对比模式切换选中）—— 托盘列表与输入卡浮层共用 */
+export function pickProfile(id) {
   const profile = profileState.list.find((p) => p.id === id);
   if (!profile || !profile.enabled) {
     hooks.log && hooks.log("这个接口已禁用，先启用它。", "error");

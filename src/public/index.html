@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Prompt Studio：本地运行的提示词工作台 —— 先沟通问清需求，再生成可交付的提示词，支持多模型并发与深度自评迭代。">
 <title>Prompt Studio · 提示词工作台</title>
+<!--
+  单栏对话式改造（index.html 改动摘要）
+  1. 移除 aside.rail 左栏，改为「顶栏 + 中间消息流 + 底部输入卡」的单列结构。
+  2. 原左栏全部功能搬进输入卡上方的上拉「功能菜单」托盘（详情见 styles.css 顶部注释）。
+  3. 标签页取消：沟通=对话气泡、提示词=结果卡片、解析=折叠卡片、变量=结果卡片内区块。
+  4. 所有被 JS 引用的 id / class / data-* 钩子保持原名（对照表见交付说明）。
+-->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231D5C86'/%3E%3Cpath d='M9 23V9h7.6c2.7 0 4.4 1.5 4.4 3.9 0 1.7-.9 2.9-2.4 3.4v.1c1.9.4 3.1 1.7 3.1 3.6 0 2.6-1.9 4-5 4H9Zm3.3-8.2h3.6c1.3 0 2-.6 2-1.6s-.7-1.6-2-1.6h-3.6v3.2Zm0 5.8h4c1.4 0 2.2-.7 2.2-1.8s-.8-1.8-2.2-1.8h-4v3.6Z' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,227 +42,336 @@
 
 <div class="warn-banner" id="cryptoWarn" hidden></div>
 
-<main class="bench">
+<main class="conversation" id="sheet" tabindex="-1" aria-label="对话与输出区">
+  <div class="stream" id="stream">
 
-  <aside class="rail" aria-label="输入台">
-    <form id="composer" autocomplete="off">
+    <div class="empty" id="emptyState">
+      <div class="empty-mark" aria-hidden="true"></div>
+      <h3>把一句话，写成可交付的提示词</h3>
+      <p>先在下面说清你要什么；工作台会先问清关键信息，再动笔写提示词。深度模式下还会自己评审、按意见修订。</p>
+      <div class="examples" id="examples" aria-label="示例">
+        <button type="button" class="chip chip-btn" data-example="给新品发布会写一封邀请函，发给三年以上的老客户">新品发布会邀请函</button>
+        <button type="button" class="chip chip-btn" data-example="给小红书写一篇护肤品种草笔记，语气亲切不油腻">小红书种草笔记</button>
+        <button type="button" class="chip chip-btn" data-example="把这份产品需求整理成给 AI 编码助手执行的任务提示词">需求转编码提示词</button>
+        <button type="button" class="chip chip-btn" data-example="写一个客服话术提示词，用来处理退款投诉">客服退款话术</button>
+      </div>
+    </div>
 
-      <section class="rail-block">
-        <div class="rail-head"><span class="step">01</span><h2>你的需求</h2></div>
-        <textarea id="raw" name="requirement" class="input-raw" rows="5" autocomplete="off" placeholder="用一句话说清楚你要什么。例如：给新品发布会写一封邀请函，发给三年以上的老客户"></textarea>
-      </section>
+    <section class="panel card card-chat" data-panel="chat" aria-label="沟通">
+      <div class="chat-head">
+        <span class="chat-round" id="chatRound">还没开始</span>
+        <button type="button" class="ghost tiny" id="chatRestart" hidden>重新开始</button>
+      </div>
+      <div class="chat-log" id="chatLog">
+        <div class="chat-empty">
+          在下方输入框写一句话，回车即可开始沟通——我会先问清几个最关键的问题；
+          信息够了再点「生成提示词」，那时候才真正调用模型写作。沟通阶段不消耗生成动作。
+        </div>
+      </div>
+      <div class="chat-facts" id="chatFacts" hidden></div>
+      <div class="chat-input" id="chatInputWrap" hidden>
+        <textarea id="chatAnswer" name="chatAnswer" rows="2" autocomplete="off" spellcheck="false" placeholder="回答上面 1-3 个问题；也可以直接说「你决定」"></textarea>
+        <div class="chat-input-actions">
+          <span class="chat-hint">Ctrl / ⌘ + Enter 发送</span>
+          <button type="button" class="ghost" id="chatSkipRound">这轮跳过</button>
+          <button type="button" class="primary compact" id="chatSend">发送回答</button>
+        </div>
+      </div>
+      <div class="chat-actions" id="chatActions" hidden>
+        <span class="chat-ready" id="chatReady"></span>
+        <button type="button" class="ghost" id="chatMore">继续补充</button>
+        <button type="button" class="primary compact" id="chatGenerate">生成提示词</button>
+      </div>
+    </section>
 
-      <section class="rail-block">
-        <div class="rail-head"><span class="step">02</span><h2>详细程度</h2></div>
-        <select id="lengthSel" aria-label="详细程度"></select>
+    <section class="panel card card-result" data-panel="prompt" aria-label="提示词结果">
+      <div class="stages" id="stages">
+        <div class="stage" data-stage="analyze"><span class="dot"></span><span class="stage-label">解析需求</span></div>
+        <div class="stage" data-stage="compose"><span class="dot"></span><span class="stage-label">撰写提示词</span></div>
+        <div class="stage" data-stage="critique"><span class="dot"></span><span class="stage-label">严格评审</span></div>
+        <div class="stage" data-stage="revise"><span class="dot"></span><span class="stage-label">按意见修订</span></div>
+      </div>
+
+      <div class="result-head">
+        <div class="result-title">
+          <h2>提示词</h2>
+          <span class="score-chip" id="scoreChip" hidden></span>
+          <span class="meter" id="meterEcho">0 字 · ~0 tokens</span>
+        </div>
+        <div class="result-actions">
+          <button type="button" class="ghost tiny" id="togglePreview" aria-pressed="false">预览</button>
+          <button type="button" class="ghost tiny" id="copyPrompt" disabled>复制</button>
+          <button type="button" class="ghost tiny" id="expandEditor">全屏</button>
+          <button type="button" class="ghost tiny" id="exportPrompt" disabled>导出为文档</button>
+        </div>
+      </div>
+
+      <div class="model-switch" id="modelSwitch" hidden>
+        <div class="model-body" id="modelBody" hidden>
+          <div class="model-toolbar">
+            <span class="model-toolbar-title">多模型对比 · 每列可单独选用</span>
+            <span class="model-actions">
+              <button type="button" class="ghost tiny" id="modelUse" disabled>用这版</button>
+              <button type="button" class="ghost tiny" id="modelCopy" disabled>复制这版</button>
+            </span>
+          </div>
+          <div class="model-tabs" id="modelTabs"></div>
+        </div>
+      </div>
+
+      <div class="editor-shell" id="editorShell" data-view="edit" hidden>
+        <button type="button" class="ghost tiny fs-exit" data-click="#expandEditor">退出全屏（Esc）</button>
+        <div class="editor-pane">
+          <textarea id="promptOut" class="prompt-editor" spellcheck="false" wrap="soft" placeholder="生成结果会出现在这里，可以直接编辑。Tab 缩进，Ctrl/Cmd + Enter 重新生成。"></textarea>
+        </div>
+        <div class="preview-pane">
+          <div id="promptPreview" class="prompt-preview"></div>
+        </div>
+      </div>
+      <div class="writing-hint" id="writingHint">正在写入提示词<span class="caret" aria-hidden="true"></span></div>
+
+      <details class="fold-block">
+        <summary><span>变量</span><span class="api-state">可填充 · 生成最终版</span></summary>
+        <div class="fold-body">
+          <div id="varsOut" class="vars-out"><p class="placeholder">提示词里的 {{变量}} 会在这里列出，并可以直接填写生成最终版。</p></div>
+        </div>
+      </details>
+    </section>
+
+    <details class="panel card card-fold" data-panel="analysis" id="analysisPanel" hidden>
+      <summary><span>解析</span><span class="api-state" id="analysisState">需求分析结果</span></summary>
+      <div class="fold-body">
+        <div id="analysisOut" class="analysis-out"><p class="placeholder">还没有解析结果。</p></div>
+      </div>
+    </details>
+
+  </div>
+  <button type="button" class="jump-bottom" id="jumpBottom" hidden aria-label="回到底部">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9.5 12 15.5 18 9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+</main>
+
+<footer class="composer" aria-label="输入区">
+  <div class="composer-col">
+
+    <div class="tray" id="tray" hidden role="menu" aria-label="功能菜单">
+      <div class="tray-head">
+        <span class="tray-title-strong">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ic"><path d="M4 7h7M15 7h5M4 12h3M11 12h9M4 17h9M17 17h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="13.5" cy="7" r="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="9.5" cy="12" r="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="15.5" cy="17" r="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          功能菜单
+        </span>
+        <button type="button" class="icon-btn" id="trayClose" aria-label="收起功能菜单">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <div class="tray-group">
+        <p class="tray-title">生成设置</p>
+        <div class="tray-row">
+          <span class="tray-label">详细程度</span>
+          <div class="segmented compact" id="lengthGroup" role="group" aria-label="详细程度"></div>
+        </div>
         <p class="hint" id="lengthNote"></p>
-      </section>
-
-      <section class="rail-block">
-        <label class="toggle">
+        <select id="lengthSel" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+        <label class="toggle tray-toggle">
           <input type="checkbox" id="deep">
           <span class="toggle-track" aria-hidden="true"><span class="toggle-knob"></span></span>
           <span class="toggle-copy">
             <strong>深度模式</strong>
-            <em>生成后自己评审，再按意见修订一版</em>
+            <em>生成后自评，再按意见修订一版</em>
           </span>
         </label>
-      </section>
-
-      <div class="rail-actions">
-        <button type="button" class="primary" id="startChat">开始沟通</button>
-        <span class="kbd-hint">Ctrl / ⌘ + Enter</span>
       </div>
-      <p class="rail-note">
-        先由模型问清关键信息，再生成提示词。
-        <button type="button" class="linklike" id="skipChat">跳过沟通，直接生成</button>
-      </p>
 
-      <section class="rail-block">
-        <div class="rail-head"><span class="step">03</span><h2>模型接口</h2>
-          <button type="button" class="ghost tiny" id="addProfile">+ 新增</button>
+      <div class="tray-group">
+        <p class="tray-title">流程</p>
+        <div class="segmented wide" id="flowMode" role="group" aria-label="生成流程">
+          <button type="button" id="startChat">先沟通再生成</button>
+          <button type="button" id="skipChat">跳过沟通，直接生成</button>
         </div>
-        <p class="hint" id="profileHint">单模型模式下点一下选中它；对比模式下可多选，同屏并发生成。</p>
+      </div>
+
+      <div class="tray-group">
+        <p class="tray-title">模型</p>
         <div class="profile-list" id="profileList"></div>
-
-        <div class="profile-form" id="profileForm" hidden>
-          <label class="field">
-            <span>名称（自定义别名）</span>
-            <input type="text" id="pfName" spellcheck="false" placeholder="GPT-4o / 通义千问">
-          </label>
-          <label class="field">
-            <span>接口协议</span>
-            <select id="pfProtocol"></select>
-          </label>
-          <label class="field">
-            <span>Base URL</span>
-            <input type="text" id="pfBaseUrl" spellcheck="false" placeholder="https://api.deepseek.com/v1">
-          </label>
-          <label class="field">
-            <span>模型 ID</span>
-            <input type="text" id="pfModelId" spellcheck="false" placeholder="deepseek-flash">
-          </label>
-          <label class="field">
-            <span>API Key</span>
-            <input type="password" id="pfApiKey" spellcheck="false" placeholder="sk-...（加密保存在本机）">
-          </label>
-          <label class="field" id="pfStyleRow">
-            <span>接口风格</span>
-            <select id="pfApiStyle">
-              <option value="chat">Chat Completions</option>
-              <option value="responses">Responses</option>
-            </select>
-          </label>
-          <div class="field-row">
-            <label class="field"><span>temperature</span><input type="text" id="pfTemperature" placeholder="0.7"></label>
-            <label class="field"><span>max tokens</span><input type="text" id="pfMaxTokens" placeholder="4096"></label>
-          </div>
-          <label class="field">
-            <span>备注</span>
-            <input type="text" id="pfNote" placeholder="用途 / 价格 / 谁给的额度">
-          </label>
-          <div class="api-actions">
-            <button type="button" class="ghost" id="pfTest">保存并测试</button>
-            <button type="button" class="primary compact" id="pfSave">保存</button>
-            <button type="button" class="ghost" id="pfCancel">取消</button>
-            <button type="button" class="ghost danger" id="pfDelete" hidden>删除</button>
-          </div>
+        <div class="tray-row-actions">
+          <button type="button" class="ghost" id="addProfile">＋ 新增接口</button>
+          <button type="button" class="ghost" id="testSelected">测试连接</button>
         </div>
+      </div>
 
-        <details class="api" id="metaPanel">
-          <summary><span>元提示词模板</span><span class="api-state" id="metaState">默认</span></summary>
-          <div class="api-body">
-            <label class="field">
-              <span>① 沟通提问用（决定 AI 怎么问）</span>
-              <textarea id="metaAsk" rows="7" spellcheck="false"></textarea>
-            </label>
-            <label class="field">
-              <span>② 生成提示词用（决定怎么写）</span>
-              <textarea id="metaCompose" rows="7" spellcheck="false"></textarea>
-            </label>
-            <div class="api-actions">
-              <button type="button" class="ghost" id="metaSave">保存模板</button>
-              <button type="button" class="ghost" id="metaReset">恢复默认</button>
-            </div>
-          </div>
-        </details>
+      <div class="tray-group">
+        <p class="tray-title">进阶</p>
+        <button type="button" class="tray-entry" id="openMeta">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ic"><path d="M7 4h7l4 4v12H7z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 4v4h4M9.5 12h5M9.5 15h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span class="tray-entry-title">元提示词模板</span>
+          <span class="tray-entry-hint" id="metaTrayHint">2 套 · 可编辑</span>
+        </button>
+        <button type="button" class="tray-entry" id="openHistory">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ic"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 8v4.2l2.8 1.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span class="tray-entry-title">历史会话</span>
+          <span class="tray-entry-hint" id="trayHistoryCount">0 条 · 可载入或删除</span>
+        </button>
+      </div>
 
-        <details class="api" id="historyPanel">
-          <summary><span>历史会话</span><span class="api-state" id="historyCount">0</span></summary>
-          <div class="api-body">
-            <div class="session-list" id="sessionList"></div>
-          </div>
-        </details>
+      <div class="tray-group">
+        <p class="tray-title">输出操作</p>
+        <div class="tray-grid">
+          <button type="button" class="ghost" data-act="expand">全屏编辑</button>
+          <button type="button" class="ghost" data-act="copy">复制提示词</button>
+          <button type="button" class="ghost" data-act="export">导出为文档</button>
+          <button type="button" class="ghost danger" data-act="clear">清空对话</button>
+        </div>
+      </div>
+    </div>
 
-        <p class="api-note" id="apiNote">接口配置存在本机 <code>data/profiles.json</code>，API Key 用 Windows DPAPI 加密（绑定当前用户），页面里只显示掩码。</p>
-      </section>
+    <div class="model-pop" id="modelPop" hidden role="menu" aria-label="模型选择">
+      <div class="model-pop-head">
+        <span>生成模型</span>
+        <span class="model-pop-actions">
+          <button type="button" class="ghost tiny" data-click="#addProfile">＋ 新增</button>
+          <button type="button" class="ghost tiny" data-click="#testSelected">测试连接</button>
+        </span>
+      </div>
+      <div class="model-pop-list" id="modelPopList"></div>
+      <div class="model-pop-foot">
+        <label class="model-pop-row">
+          <span>沟通用模型</span>
+          <select id="chatModel"></select>
+        </label>
+      </div>
+    </div>
 
+    <form id="composer" autocomplete="off">
+      <div class="composer-top">
+        <button type="button" class="model-chip" id="modelChipBtn" aria-expanded="false" aria-controls="modelPop" aria-haspopup="menu" data-state="offline">
+          <span class="chip-dot" aria-hidden="true"></span>
+          <span class="model-chip-name" id="modelChipName">未选择模型</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ic"><path d="M6 9.5 12 15.5 18 9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="segmented compact" id="runMode" role="group" aria-label="生成模式">
+          <button type="button" data-mode="single" aria-pressed="true">单模型</button>
+          <button type="button" data-mode="compare" aria-pressed="false">多模型</button>
+        </div>
+      </div>
+      <textarea id="raw" name="requirement" class="composer-input" rows="1" autocomplete="off" placeholder="说说你要什么……也可以直接粘一段需求，我来问清关键信息。"></textarea>
+      <div class="composer-bottom">
+        <button type="button" class="ghost" id="trayToggle" aria-expanded="false" aria-controls="tray">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ic"><path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          功能
+        </button>
+        <span class="meter" id="meter">0 字 · ~0 tokens</span>
+        <button type="submit" class="primary compact" id="sendBtn">发送</button>
+      </div>
     </form>
-  </aside>
-  <section class="sheet" id="sheet" tabindex="-1" aria-label="输出台">
-    <div class="stages" id="stages">
-      <div class="stage" data-stage="analyze"><span class="dot"></span><span class="stage-label">解析需求</span></div>
-      <div class="stage" data-stage="compose"><span class="dot"></span><span class="stage-label">撰写提示词</span></div>
-      <div class="stage" data-stage="critique"><span class="dot"></span><span class="stage-label">严格评审</span></div>
-      <div class="stage" data-stage="revise"><span class="dot"></span><span class="stage-label">按意见修订</span></div>
+
+    <p class="composer-hint">Enter / ⌘ + Enter 发送 · Shift + Enter 换行 · Ctrl / ⌘ + / 打开功能菜单</p>
+
+    <div class="logbar" id="logBar" data-open="false">
+      <span class="logbar-label" aria-hidden="true">状态</span>
+      <div class="log" id="log" role="status" aria-live="polite"></div>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="ic logbar-chevron"><path d="M6 14.5 12 8.5l6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
+  </div>
+</footer>
 
-    <div class="sheet-frame">
-      <div class="sheet-toolbar">
-        <div class="tabs" id="tabs" role="tablist">
-          <button type="button" class="tab is-active" data-tab="chat" role="tab">沟通</button>
-          <button type="button" class="tab" data-tab="prompt" role="tab">提示词</button>
-          <button type="button" class="tab" data-tab="analysis" role="tab">解析</button>
-          <button type="button" class="tab" data-tab="vars" role="tab">变量</button>
-        </div>
-        <div class="toolbar-actions">
-          <div class="segmented compact" id="runMode" role="group" aria-label="生成模式">
-            <button type="button" data-mode="single" aria-pressed="true">单模型</button>
-            <button type="button" data-mode="compare" aria-pressed="false">多模型</button>
-          </div>
-          <span class="meter" id="meter">0 字 · ~0 tokens</span>
-          <span class="score-chip" id="scoreChip" hidden></span>
-          <button type="button" class="ghost" id="expandEditor" title="全屏编辑">全屏</button>
-          <button type="button" class="ghost" id="copyPrompt" disabled>复制</button>
-          <button type="button" class="ghost" id="exportPrompt" disabled>导出为文档</button>
-        </div>
+<div class="modal" id="profileForm" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="pfTitle">
+    <header class="modal-head">
+      <h2 id="pfTitle">模型接口</h2>
+      <button type="button" class="icon-btn" data-click="#pfCancel" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <label class="field">
+        <span>名称（自定义别名）</span>
+        <input type="text" id="pfName" spellcheck="false" placeholder="GPT-4o / 通义千问">
+      </label>
+      <label class="field">
+        <span>接口协议</span>
+        <select id="pfProtocol"></select>
+      </label>
+      <p class="hint" id="profileHint">单模型模式下点一下选中它；对比模式下可多选，同屏并发生成。</p>
+      <label class="field">
+        <span>Base URL</span>
+        <input type="text" id="pfBaseUrl" spellcheck="false" placeholder="https://api.deepseek.com/v1">
+      </label>
+      <label class="field">
+        <span>模型 ID</span>
+        <input type="text" id="pfModelId" spellcheck="false" placeholder="deepseek-flash">
+      </label>
+      <label class="field">
+        <span>API Key</span>
+        <input type="password" id="pfApiKey" spellcheck="false" placeholder="sk-...（加密保存在本机）">
+      </label>
+      <label class="field" id="pfStyleRow">
+        <span>接口风格</span>
+        <select id="pfApiStyle">
+          <option value="chat">Chat Completions</option>
+          <option value="responses">Responses</option>
+        </select>
+      </label>
+      <div class="field-row">
+        <label class="field"><span>temperature</span><input type="text" id="pfTemperature" placeholder="0.7"></label>
+        <label class="field"><span>max tokens</span><input type="text" id="pfMaxTokens" placeholder="4096"></label>
       </div>
-
-      <div class="panels">
-
-        <div class="panel is-active" data-panel="chat">
-          <div class="chat-head">
-            <span class="chat-round" id="chatRound">还没开始</span>
-            <label class="chat-model">沟通用模型
-              <select id="chatModel"></select>
-            </label>
-            <button type="button" class="ghost tiny" id="chatRestart" hidden>重新开始</button>
-          </div>
-          <div class="chat-log" id="chatLog">
-            <div class="chat-empty">
-              点左边「开始沟通」，我会先问清几个最关键的问题；信息够了再点「生成提示词」，
-              那时候才会真正调用模型写作。沟通阶段不消耗生成动作。
-            </div>
-          </div>
-          <div class="chat-facts" id="chatFacts" hidden></div>
-          <div class="chat-input" id="chatInputWrap" hidden>
-            <textarea id="chatAnswer" name="chatAnswer" rows="2" autocomplete="off" spellcheck="false" placeholder="回答上面 1-3 个问题；也可以直接说「你决定」"></textarea>
-            <div class="chat-input-actions">
-              <span class="chat-hint">Ctrl / ⌘ + Enter 发送</span>
-              <button type="button" class="ghost" id="chatSkipRound">这轮跳过</button>
-              <button type="button" class="primary compact" id="chatSend">发送回答</button>
-            </div>
-          </div>
-          <div class="chat-actions" id="chatActions" hidden>
-            <span class="chat-ready" id="chatReady"></span>
-            <button type="button" class="ghost" id="chatMore">继续补充</button>
-            <button type="button" class="primary compact" id="chatGenerate">生成提示词</button>
-          </div>
-        </div>
-
-        <div class="panel" data-panel="prompt">
-          <div class="model-switch" id="modelSwitch" hidden>
-            <div class="model-tabs" id="modelTabs" role="tablist"></div>
-            <div class="model-actions">
-              <button type="button" class="ghost tiny" id="modelUse">用这版</button>
-              <button type="button" class="ghost tiny" id="modelCopy">复制这版</button>
-            </div>
-          </div>
-          <div class="model-body" id="modelBody" hidden></div>
-          <div class="editor-shell" id="editorShell" hidden>
-            <div class="editor-pane">
-              <textarea id="promptOut" class="prompt-editor" spellcheck="false" wrap="soft" placeholder="生成结果会出现在这里，可以直接编辑。Tab 缩进，Ctrl/Cmd + Enter 重新生成。"></textarea>
-            </div>
-            <div class="preview-pane">
-              <div id="promptPreview" class="prompt-preview"></div>
-            </div>
-          </div>
-          <div class="empty" id="emptyState">
-            <div class="empty-mark" aria-hidden="true"></div>
-            <h3>左边写一句话，右边得到一份可交付的提示词</h3>
-            <p>工作台会先让模型问清关键信息，再动笔写提示词；深度模式下还会自己评审、按停止规则迭代到改不动为止。</p>
-            <ul>
-              <li><strong>不填 Key 也能用</strong>：走内置规则模式，先把结构搭起来。</li>
-              <li><strong>填了 Key</strong>：调用你自己的模型接口，逐字生成并可自评。</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="panel" data-panel="analysis">
-          <div id="analysisOut" class="analysis-out"><p class="placeholder">还没有解析结果。</p></div>
-        </div>
-
-        <div class="panel" data-panel="vars">
-          <div id="varsOut" class="vars-out"><p class="placeholder">提示词里的 {{变量}} 会在这里列出。</p></div>
-        </div>
-
+      <label class="field">
+        <span>备注</span>
+        <input type="text" id="pfNote" placeholder="用途 / 价格 / 谁给的额度">
+      </label>
+      <p class="api-note" id="apiNote">接口配置存在本机 <code>data/profiles.json</code>，API Key 用 Windows DPAPI 加密（绑定当前用户），页面里只显示掩码。</p>
+      <div class="api-actions">
+        <button type="button" class="ghost" id="pfTest">保存并测试</button>
+        <button type="button" class="primary compact" id="pfSave">保存</button>
+        <button type="button" class="ghost" id="pfCancel">取消</button>
+        <button type="button" class="ghost danger" id="pfDelete" hidden>删除</button>
       </div>
     </div>
+  </div>
+</div>
 
-    <div class="log" id="log" role="status" aria-live="polite"></div>
-  </section>
+<div class="modal" id="metaPanel" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="metaTitle">
+    <header class="modal-head">
+      <h2 id="metaTitle">元提示词模板</h2>
+      <span class="api-state" id="metaState">默认</span>
+      <button type="button" class="icon-btn" id="metaClose" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <label class="field">
+        <span>① 沟通提问用（决定 AI 怎么问）</span>
+        <textarea id="metaAsk" rows="7" spellcheck="false"></textarea>
+      </label>
+      <label class="field">
+        <span>② 生成提示词用（决定怎么写）</span>
+        <textarea id="metaCompose" rows="7" spellcheck="false"></textarea>
+      </label>
+      <div class="api-actions">
+        <button type="button" class="ghost" id="metaSave">保存模板</button>
+        <button type="button" class="ghost" id="metaReset">恢复默认</button>
+        <button type="button" class="ghost" data-click="#metaClose">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-</main>
+<div class="modal" id="historyPanel" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+    <header class="modal-head">
+      <h2 id="historyTitle">历史会话</h2>
+      <span class="api-state" id="historyCount">0 条</span>
+      <button type="button" class="icon-btn" id="historyClose" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <div class="session-list" id="sessionList"></div>
+    </div>
+  </div>
+</div>
 
 <script type="module" src="./js/app.js"></script>
 </body>
