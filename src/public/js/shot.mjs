@@ -109,7 +109,7 @@ export function mountShot(options = {}) {
     hoopTimer: 0,
     flashTimer: 0,
     haloId: 0,
-    sparkId: 0,
+    poolId: 0,
     audioCtx: null,
     lastRim: { x: 0, y: 0 },
   };
@@ -218,6 +218,7 @@ export function mountShot(options = {}) {
     p.vy = 0;
     p.el.setAttribute("data-kind", "trail");
     p.el.setAttribute("data-live", "1");
+    pumpParticles();
   }
 
   function spawnSpark(x, y, at, count, kind) {
@@ -237,6 +238,7 @@ export function mountShot(options = {}) {
       p.vy = Math.sin(ang) * speed - 40;
       p.el.setAttribute("data-kind", kind);
       p.el.setAttribute("data-live", "1");
+      pumpParticles();
     }
   }
 
@@ -265,6 +267,23 @@ export function mountShot(options = {}) {
         place(p.el, x, y, lerp(1, 0.5, k), 0);
       }
     }
+  }
+
+  /**
+   * 粒子自走一条会自己收尾的循环：飞行结束后球的主循环就停了，
+   * 但入网的火花还要再飞 420ms —— 交给这条循环，既不会被提前掐掉，
+   * 也不会把已经到期的粒子留在画面上。
+   */
+  function pumpParticles() {
+    if (!state.pool || state.poolId) return;
+    const tick = () => {
+      const at = nowMs();
+      stepParticles(at);
+      let alive = false;
+      for (const p of state.pool) { if (p.live) { alive = true; break; } }
+      state.poolId = alive ? raf(tick) : 0;
+    };
+    state.poolId = raf(tick);
   }
 
   /* ---------- 篮筐状态 ---------- */
@@ -388,7 +407,7 @@ export function mountShot(options = {}) {
 
     show(ball, true);
     if (ball) ball.style.opacity = "1";
-    for (const g of ghosts) show(g, false);
+    for (const g of ghosts) { show(g, false); g.style.opacity = "0"; }
 
     const onResize = () => {
       if (finished) return;
@@ -407,7 +426,7 @@ export function mountShot(options = {}) {
       state.flying = false;
       if (typeof removeEventListener === "function") removeEventListener("resize", onResize);
       if (ball) { ball.style.willChange = ""; show(ball, false); ball.style.opacity = "0"; }
-      for (const g of ghosts) { g.style.willChange = ""; show(g, false); }
+      for (const g of ghosts) { g.style.willChange = ""; show(g, false); g.style.opacity = "0"; }
       if (state.rafId) { caf(state.rafId); state.rafId = 0; }
       /* 入网这一刻如果还在生成中，把筐里的能量环接上来（投篮期间不抢状态） */
       if (hoopEl) hoopEl.dataset.state = view.loading ? "loading" : "idle";
@@ -446,7 +465,7 @@ export function mountShot(options = {}) {
 
         ghosts.forEach((g, i) => {
           const lagged = clamp((el - T_WINDUP - GHOST_LAG[i]) / T_FLIGHT, 0, 1);
-          if (lagged <= 0) { show(g, false); return; }
+          if (lagged <= 0) { show(g, false); g.style.opacity = "0"; return; }
           const gx = lerp(start.x, target.x, lagged);
           const gy = bezierY(start, ctrl, target, easeInQuad(lagged));
           show(g, true);
@@ -461,7 +480,7 @@ export function mountShot(options = {}) {
       } else if (!landed) {
         landed = true;
         place(ball, target.x, target.y, 0.62, 25);
-        for (const g of ghosts) show(g, false);
+        for (const g of ghosts) { show(g, false); g.style.opacity = "0"; }
         swish(at);
         setTimeout(cleanup, T_TAIL);
       }
@@ -472,7 +491,7 @@ export function mountShot(options = {}) {
         if (ball) ball.style.opacity = String(lerp(1, 0, k).toFixed(3));
       }
 
-      stepParticles(at);
+      /* 粒子由 pumpParticles 自走一条循环（飞行结束后还要飞一会儿），这里不再重复驱动 */
       state.rafId = raf(frame);
     };
 
@@ -650,14 +669,6 @@ export function mountShot(options = {}) {
     const p = (state.lastRim && (state.lastRim.x || state.lastRim.y)) ? state.lastRim : (rimPoint() || fallbackRim());
     ensureLayer();
     spawnSpark(p.x, p.y, at, state.reduced ? 0 : 10, "spark-bad");
-    const t0 = at;
-    const step = () => {
-      const at2 = nowMs();
-      stepParticles(at2);
-      if (at2 - t0 < 520) state.sparkId = raf(step);
-      else state.sparkId = 0;
-    };
-    step();
   }
 
   if (hoopEl) hoopEl.dataset.variant = view.variant;

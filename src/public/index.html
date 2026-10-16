@@ -30,7 +30,6 @@
     <span class="mark" aria-hidden="true"></span>
     <div class="brand-text">
       <h1>Prompt Studio</h1>
-      <p>把一句话，写成能直接交付的提示词</p>
     </div>
   </div>
   <div class="topbar-right">
@@ -42,19 +41,24 @@
 
 <div class="warn-banner" id="cryptoWarn" hidden></div>
 
+<!--
+  直接双击 index.html（file://）时，浏览器会以跨域策略拦掉所有 <script type="module">，
+  页面会长得跟正常一样但一个按钮都不响应。这里用普通脚本先把话说清楚（普通脚本不受该限制）。
+-->
+<div class="warn-banner" id="bootWarn" hidden>
+  <strong>这个页面是用 file:// 直接打开的，所以按钮不会响应。</strong>
+  浏览器不允许 file:// 页面加载 ES 模块（本项目零依赖、无构建，靠原生模块跑），<br>
+  请改用下面任意一种方式：① 在项目目录执行 <code>node server.mjs</code>（Windows 也可以双击 <code>run.cmd</code>），
+  然后访问 <code>http://127.0.0.1:5178</code>；② 打开已部署的静态演示版
+  <code>https://jie645.github.io/prompt-studio/</code>。
+</div>
+
 <main class="conversation" id="sheet" tabindex="-1" aria-label="对话与输出区">
   <div class="stream" id="stream">
 
     <div class="empty" id="emptyState">
       <div class="empty-mark" aria-hidden="true"></div>
       <h3>把一句话，写成可交付的提示词</h3>
-      <p>先在下面说清你要什么；工作台会先问清关键信息，再动笔写提示词。深度模式下还会自己评审、按意见修订。</p>
-      <div class="examples" id="examples" aria-label="示例">
-        <button type="button" class="chip chip-btn" data-example="给新品发布会写一封邀请函，发给三年以上的老客户">新品发布会邀请函</button>
-        <button type="button" class="chip chip-btn" data-example="给小红书写一篇护肤品种草笔记，语气亲切不油腻">小红书种草笔记</button>
-        <button type="button" class="chip chip-btn" data-example="把这份产品需求整理成给 AI 编码助手执行的任务提示词">需求转编码提示词</button>
-        <button type="button" class="chip chip-btn" data-example="写一个客服话术提示词，用来处理退款投诉">客服退款话术</button>
-      </div>
     </div>
 
     <section class="panel card card-chat" data-panel="chat" aria-label="沟通">
@@ -62,10 +66,17 @@
         <span class="chat-round" id="chatRound">还没开始</span>
         <button type="button" class="ghost tiny" id="chatRestart" hidden>重新开始</button>
       </div>
-      <div class="chat-log" id="chatLog">
-        <div class="chat-empty">
-          在下方输入框写一句话，回车即可开始沟通——我会先问清几个最关键的问题；
-          信息够了再点「生成提示词」，那时候才真正调用模型写作。沟通阶段不消耗生成动作。
+      <!--
+        输出框：生成出来的提示词会实时写在这里（#chatOut），框右侧有滚动条。
+        沟通环节的问答气泡落在同一个框里的上半部分（#chatLog），两边共同滚动。
+      -->
+      <div class="chat-body" id="chatBody">
+        <div class="chat-log" id="chatLog">
+          <div class="chat-empty">生成结果会出现在这里。</div>
+        </div>
+        <div class="chat-out" id="chatOut" hidden>
+          <p class="chat-out-label">输出</p>
+          <pre class="chat-out-text" id="chatOutText"></pre>
         </div>
       </div>
       <div class="chat-facts" id="chatFacts" hidden></div>
@@ -480,5 +491,13 @@
 </div>
 
 <script type="module" src="./js/app.js"></script>
+<!-- 放在模块脚本之后：模块被 file:// 拦掉时，这段普通脚本仍然会执行 -->
+<script>
+(function () {
+  if (location.protocol !== "file:") return;
+  var el = document.getElementById("bootWarn");
+  if (el) el.hidden = false;
+})();
+</script>
 </body>
 </html>

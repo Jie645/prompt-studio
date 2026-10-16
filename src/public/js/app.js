@@ -247,6 +247,7 @@ function setPrompt(text) {
   }
   heldPrompt = null;      // 能直接上屏了：之前攒的那份作废，别让它回头盖掉更新的正文
   state.prompt = text;
+  syncChatOut(text);      // 生成结果实时写进沟通卡里那个输出框
   const editor = $("#promptOut");
   if (editor.value !== text) editor.value = text;
   syncMeter(text);
@@ -265,6 +266,35 @@ function flushHeldPrompt() {
   const text = heldPrompt;
   heldPrompt = null;
   if (text !== null) setPrompt(text);
+}
+
+/**
+ * 输出框（沟通卡里那个方框）：生成出来的提示词实时写在这里，框右侧是滚动条。
+ * 没有内容时整块收起，框里只留一行占位提示。
+ */
+function syncChatOut(text) {
+  const host = $("#chatOut");
+  const body = $("#chatOutText");
+  if (!host || !body) return;
+  const value = String(text == null ? "" : text);
+  const log = $("#chatLog");
+  if (!value.trim()) {
+    host.hidden = true;
+    if (body.textContent) body.textContent = "";
+    if (log) delete log.dataset.hasOutput;
+    return;
+  }
+  host.hidden = false;
+  if (log) log.dataset.hasOutput = "1";   // 有输出了就不再显示"生成结果会出现在这里"
+  if (body.textContent === value) return;
+  body.textContent = value;
+  scrollChatBox();
+}
+
+/** 输出框的滚动条始终跟着最新内容走 */
+function scrollChatBox() {
+  const box = $("#chatBody") || $("#chatLog");
+  if (box) box.scrollTop = box.scrollHeight || 0;
 }
 
 /** 计量：输入卡底部 + 结果卡片脚注各一份（同一份数字，两处显示） */
@@ -667,8 +697,16 @@ async function startChat() {
   }
   if (fsShot && fsShot.isFlying()) { log("球还在空中，等它入网。", ""); return; }
   if (!profileState.list.length) {
-    /* 没有可用接口（GitHub Pages 上的纯静态演示版就是这种）：球照样投出去，
-       落地之后再按「失败」如实报红 —— 让这一步的动作与结果都看得见，而不是毫无反应。 */
+    /* GitHub Pages 上的纯静态演示版没有本地服务，也就永远加不了接口 ——
+       沟通提问必须走模型，所以这里直接落到内置规则模式（等价于「跳过沟通，直接生成」），
+       否则访客按发送只会得到一次失败。 */
+    if (STATIC_HOST) {
+      log("静态演示版没有本地服务，先用内置规则模式搭出结构骨架；在自己的机器上执行 node server.mjs 就能用真模型沟通、改写与自评。", "");
+      showTab("prompt");
+      generate({ from: "raw", variant: "cyan" });
+      return;
+    }
+    /* 本地运行、但一个接口都没加：球照样投出去，落地之后再按「失败」如实报红 */
     const gate = launchShot("raw", "cyan");
     log("先在「＋ 功能 → 模型」里加一个接口（或用「跳过沟通，直接生成」走内置规则模式）。", "error");
     if (fsShot) {
@@ -820,8 +858,7 @@ function renderChat() {
   $("#chatRestart").hidden = !chat;
 
   if (!chat) {
-    logEl.innerHTML = '<div class="chat-empty">在下方输入框写一句话，回车即可开始沟通——我会先问清几个最关键的问题；' +
-      "信息够了再点「生成提示词」，那时候才真正调用模型写作。沟通阶段不消耗生成动作。</div>";
+    logEl.innerHTML = '<div class="chat-empty">生成结果会出现在这里。</div>';
     factsEl.hidden = true;
     inputWrap.hidden = true;
     actions.hidden = true;
@@ -840,7 +877,7 @@ function renderChat() {
       $("#chatAnswer").focus();
     });
   }
-  logEl.scrollTop = logEl.scrollHeight;
+  scrollChatBox();
 
   const keys = Object.keys(chat.facts || {});
   factsEl.hidden = !keys.length;
@@ -1814,6 +1851,7 @@ function bindEvents() {
   editor.addEventListener("input", (e) => {
     state.prompt = e.target.value;
     syncMeter(state.prompt);
+    syncChatOut(state.prompt);      // 手改正文时输出框跟着走
     renderVars();
     applyView();
   });
@@ -1954,17 +1992,6 @@ function bindEvents() {
   $("#modelChipBtn").addEventListener("click", () => togglePop());
   $("#testSelected").addEventListener("click", () => testSelectedProfile());
   $("#togglePreview").addEventListener("click", () => togglePreviewView());
-
-  // 空状态示例：点一下填进输入框
-  for (const btn of document.querySelectorAll("#examples button[data-example]")) {
-    btn.addEventListener("click", () => {
-      const raw = $("#raw");
-      raw.value = btn.dataset.example;
-      raw.focus();
-      autogrow(raw);
-        syncShotDocks();
-    });
-  }
 
   // 托盘「输出操作」：全屏 / 复制 / 导出 / 清空
   for (const btn of document.querySelectorAll("#tray [data-act]")) {
