@@ -67,9 +67,15 @@
   --ease: cubic-bezier(0.22, 0.9, 0.28, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  /* 投篮专用缓动：起步利落、收尾扎实（抛物线本身由 shot.mjs 逐帧算，这里只给 CSS 补间用） */
+  --ease-shot: cubic-bezier(0.34, 0.86, 0.28, 1);
+
+  /* ---------- 投篮 ---------- */
+  --ball-size: 34px;       /* 飞行中的球（窄屏在媒体查询里收小） */
 
   /* ---------- 层级 ---------- */
   --z-composer: 30;
+  --z-shot: 32;            /* 投掷层：高于输入卡、低于托盘与弹窗 */
   --z-pop: 35;
   --z-tray: 40;
   --z-full: 50;
@@ -1764,4 +1770,432 @@ body:has(.stage[data-state="active"]) .meter { animation: tick 1.6s var(--ease) 
 
   /* 计量数字不再跳动 */
   body:has(.stage[data-state="active"]) .meter { animation: none !important; }
+}
+
+/* ================================================================== */
+/* 投篮交互：篮筐 / 球 / 拖尾 / 入网反馈 / 结果弹窗                        */
+/* ================================================================== */
+/*
+ * 约定（与 shot.mjs 对齐）：
+ *   1. 篮筐只有一个，挂在输入卡右上角外侧（.composer-col 的顶边 = 输入卡顶边），
+ *      因为输入卡贴底，所以篮筐永远在视口内 —— 沟通卡里的回答也能"远投"过来。
+ *   2. 配色全部走现有令牌：默认用站点能量色（--cyan / --violet），
+ *      「经典橙篮筐」时切到 --amber + #ff8a3d，两套都在，默认前者。
+ *   3. 运动只动 transform / opacity；粒子/残影/光环都由 shot.mjs 挂到 #shotLayer 上。
+ */
+
+/* ---------- 投掷层（球 / 残影 / 粒子 / 光环） ---------- */
+.shot-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-shot);
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout style;
+}
+
+.shot-ball {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--ball-size);
+  height: var(--ball-size);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 0 16px -4px rgba(0, 0, 0, 0.9), inset 0 0 8px -4px rgba(0, 0, 0, 0.8);
+}
+/* 一条缝 + 一点高光：让自转看得出来 */
+.shot-ball::before {
+  content: "";
+  position: absolute;
+  inset: 20% -4%;
+  border: 1.5px solid rgba(6, 9, 15, 0.42);
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-radius: 50%;
+}
+.shot-ball::after {
+  content: "";
+  position: absolute;
+  left: 24%;
+  top: 20%;
+  width: 26%;
+  height: 26%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+}
+.shot-ball[data-variant="cyan"] {
+  background: radial-gradient(circle at 34% 30%, #e6feff, var(--cyan) 56%, #1b8ba1);
+}
+.shot-ball[data-variant="violet"] {
+  background: radial-gradient(circle at 34% 30%, #efeaff, var(--violet) 56%, #4a3fbe);
+}
+.shot-ball[data-variant="energy"] {
+  background: linear-gradient(135deg, var(--cyan), var(--violet) 68%);
+  box-shadow: 0 0 22px -3px rgba(139, 124, 255, 0.9);
+}
+.shot-ball[data-variant="energy"]::before { border-color: rgba(6, 9, 15, 0.3); }
+
+.shot-ghost::before,
+.shot-ghost::after { display: none; }
+
+.shot-particle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+.shot-particle[data-variant="cyan"] { background: var(--cyan); }
+.shot-particle[data-variant="violet"] { background: var(--violet); }
+/* 能量球：更亮的拖尾 */
+.shot-particle[data-variant="energy"] {
+  background: linear-gradient(120deg, #b8f6ff, var(--violet));
+  box-shadow: 0 0 10px 0 rgba(139, 124, 255, 0.85);
+}
+.shot-particle[data-kind="spark"] {
+  width: 5px;
+  height: 5px;
+  background: linear-gradient(120deg, var(--cyan), var(--violet));
+  box-shadow: 0 0 9px -1px rgba(139, 124, 255, 0.85);
+}
+.shot-particle[data-kind="spark-bad"] {
+  width: 5px;
+  height: 5px;
+  background: var(--red);
+  box-shadow: 0 0 9px -1px rgba(255, 91, 110, 0.85);
+}
+
+.shot-halo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 90px;
+  height: 90px;
+  border: 2px solid rgba(77, 216, 232, 0.85);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 0 18px -4px rgba(139, 124, 255, 0.9), inset 0 0 14px -6px rgba(77, 216, 232, 0.9);
+}
+
+/* ---------- 篮筐 ---------- */
+.hoop {
+  position: absolute;
+  right: 4px;
+  bottom: calc(100% - 4px);      /* 压在输入卡上沿：篮圈悬在卡片上方，网口搭在边上 */
+  width: clamp(80px, 9vw, 104px);
+  z-index: 6;                     /* 高于输入卡（同层内），低于托盘与弹窗 */
+  pointer-events: none;
+  user-select: none;
+}
+.hoop-breathe { animation: hoop-breathe 4s ease-in-out infinite; }
+.hoop-svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.hoop-board {
+  fill: var(--glass-2);
+  stroke: var(--hair-2);
+  stroke-width: 1;
+}
+.hoop-brace { stroke: var(--hair-3); stroke-width: 1.5; stroke-linecap: round; }
+.hoop-net path,
+.hoop-net-hem {
+  fill: none;
+  stroke: var(--hair-3);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+.hoop-rim {
+  fill: none;
+  stroke: url(#hoopRimEnergy);
+  stroke-width: 2.5;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* 经典橙篮筐（功能菜单 → 进阶 里切换） */
+.hoop[data-variant="classic"] .hoop-board {
+  fill: rgba(240, 182, 74, 0.1);
+  stroke: rgba(240, 182, 74, 0.34);
+}
+.hoop[data-variant="classic"] .hoop-brace { stroke: rgba(240, 182, 74, 0.5); }
+.hoop[data-variant="classic"] .hoop-net path,
+.hoop[data-variant="classic"] .hoop-net-hem { stroke: var(--amber); opacity: 0.42; }
+.hoop[data-variant="classic"] .hoop-rim {
+  stroke: url(#hoopRimClassic);
+  filter: drop-shadow(0 0 5px rgba(255, 138, 61, 0.35));
+}
+
+/* 闲时呼吸 */
+@keyframes hoop-breathe {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -2px, 0); }
+}
+
+/* 入网：篮圈挤压 + 网波动 */
+.hoop[data-state="swish"] .hoop-rim { animation: hoop-rim-squash 260ms var(--ease-shot) both; }
+.hoop[data-state="swish"] .hoop-net {
+  transform-box: fill-box;
+  transform-origin: top center;
+  animation: hoop-net-wobble 400ms var(--ease) both;
+}
+@keyframes hoop-rim-squash {
+  0% { transform: scaleY(1); }
+  30% { transform: scaleY(0.86); }
+  62% { transform: scaleY(1.06); }
+  100% { transform: scaleY(1); }
+}
+@keyframes hoop-net-wobble {
+  0% { transform: scale(1, 1) skewX(0deg); }
+  22% { transform: scale(1.06, 0.94) skewX(-3deg); }
+  48% { transform: scale(0.97, 1.05) skewX(3deg); }
+  74% { transform: scale(1.02, 0.99) skewX(-1.4deg); }
+  100% { transform: scale(1, 1) skewX(0deg); }
+}
+/* 确认色：入网瞬间闪绿（= 机器已确认收到），失败闪红 */
+.hoop[data-flash="ok"] .hoop-rim {
+  stroke: var(--green);
+  filter: drop-shadow(0 0 6px rgba(63, 224, 176, 0.75));
+}
+.hoop[data-flash="bad"] .hoop-rim {
+  stroke: var(--red);
+  filter: drop-shadow(0 0 6px rgba(255, 91, 110, 0.7));
+}
+.hoop[data-state="error"] { animation: hoop-shake 220ms var(--ease-in) both; }
+@keyframes hoop-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  25% { transform: translate3d(-3px, 0, 0); }
+  50% { transform: translate3d(3px, 0, 0); }
+  75% { transform: translate3d(-2px, 0, 0); }
+}
+
+/* 生成中：筐内一圈旋转的能量环（conic-gradient + mask 抠成环） */
+.hoop-loader {
+  position: absolute;
+  left: 50%;
+  top: 63%;                       /* 与篮圈中心同高（68 / 108） */
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(77, 216, 232, 0), var(--cyan), var(--violet), rgba(139, 124, 255, 0));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  transform: translate(-50%, -50%);
+}
+.hoop[data-state="loading"] .hoop-loader {
+  opacity: 1;
+  animation: hoop-spin 1.6s linear infinite;
+}
+@keyframes hoop-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ---------- 待发的球（输入框左下角的胶囊） ---------- */
+.shot-dock {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 210px;
+  height: 30px;
+  padding: 0 11px 0 5px;
+  border: 1px solid var(--hair-2);
+  border-radius: 999px;
+  background: var(--glass-3);
+  color: var(--ink-2);
+  font-family: var(--display);
+  font-size: 12px;
+  cursor: pointer;
+  animation: fade-in 0.2s var(--ease-out) both;
+  transition: color 0.16s var(--ease), border-color 0.16s var(--ease), background 0.16s var(--ease), transform 0.16s var(--ease);
+}
+.shot-dock:hover { color: var(--ink); border-color: var(--hair-3); background: var(--glass-2); transform: translate3d(0, -1px, 0); }
+.shot-dock:focus-visible { outline: none; box-shadow: var(--ring); }
+.shot-dock-ball {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #e6feff, var(--cyan) 56%, #1b8ba1);
+  box-shadow: 0 0 10px -3px var(--cyan);
+  animation: shot-dock-ready 2.4s var(--ease) infinite;
+}
+.shot-dock-ball[data-variant="violet"] {
+  background: radial-gradient(circle at 34% 30%, #efeaff, var(--violet) 56%, #4a3fbe);
+  box-shadow: 0 0 10px -3px var(--violet);
+}
+.shot-dock-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+@keyframes shot-dock-ready {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -1.5px, 0) scale(1.06); }
+}
+
+/* ---------- 入网后的消息气泡：从篮筐方向弹进消息流 ---------- */
+.bubble[data-fresh="1"] { animation: bubble-shot-in 420ms var(--ease-out) both; }
+@keyframes bubble-shot-in {
+  from { opacity: 0; transform: translate3d(26px, 46px, 0) scale(0.94); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+/* 篮筐常驻在输入卡右上角，会给消息流底部让出约 90px：
+   否则最后一张卡片（尤其是沟通卡的「发送回答」）会被压在篮筐底下 */
+.stream { padding-bottom: 118px; }
+
+/* ================================================================== */
+/* 结果弹窗（跑完四阶段后自动弹出 / 或点结果卡片上的「查看结果」）            */
+/* ================================================================== */
+
+#resultPop .modal-card {
+  position: relative;
+  width: min(900px, 100%);
+  animation: result-pop-in 320ms var(--ease-out) both;
+}
+/* 入场：从篮筐方向（右下）长出来 */
+@keyframes result-pop-in {
+  from { opacity: 0; transform: translate3d(24px, 14px, 0) scale(0.86); filter: blur(8px); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+}
+/* 顶边扫过一道能量光带（一次，不循环） */
+#resultPop .modal-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: var(--energy);
+  pointer-events: none;
+  animation: result-pop-band 1s var(--ease) 120ms 1 both;
+}
+@keyframes result-pop-band {
+  from { transform: translate3d(-100%, 0, 0); opacity: 0; }
+  25% { opacity: 1; }
+  to { transform: translate3d(100%, 0, 0); opacity: 0; }
+}
+
+#resultPop .modal-head h2 { margin-right: 0; }
+#resultPop .modal-head .meter { margin-left: auto; }
+#resultPop .modal-body { padding: 12px 18px 14px; }
+
+.result-pop-text {
+  margin: 0;
+  max-height: 52dvh;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-m);
+  background: rgba(6, 9, 15, 0.42);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.62;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  scrollbar-color: var(--hair-3) transparent;
+  scrollbar-width: thin;
+}
+
+.result-pop-models { display: grid; gap: 10px; margin-bottom: 12px; }
+.result-pop-models[data-cols="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.result-pop-models[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rp-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-m);
+  background: var(--glass-3);
+}
+.rp-col-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rp-col-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-col-meta { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
+.rp-col-actions { margin-left: auto; display: flex; gap: 4px; }
+.rp-col-text {
+  margin: 0;
+  max-height: 34dvh;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.result-pop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--hair);
+  background: var(--glass-3);
+}
+.result-pop-actions .primary { margin-right: 4px; }
+
+/* ================================================================== */
+/* 投篮：窄屏与动效降级                                                  */
+/* ================================================================== */
+
+@media (max-width: 767px) {
+  :root { --ball-size: 26px; }
+  .hoop { width: clamp(72px, 16vw, 88px); right: 2px; }
+  .stream { padding-bottom: 108px; }        /* 同样给篮筐让位 */
+  .jump-bottom { right: 96px; }             /* 回到底部：躲开右上角的篮筐 */
+  .shot-dock { max-width: 138px; height: 28px; }
+  .shot-dock-text { max-width: 84px; }
+  #resultPop { padding: 10px; }
+  .result-pop-text { max-height: 44dvh; }
+  .result-pop-models[data-cols="2"],
+  .result-pop-models[data-cols="3"] { grid-template-columns: 1fr; }
+  .result-pop-actions { gap: 5px; }
+}
+
+/* 375px 这类窄屏：篮筐再收一档、待发球只留球本身，保证不占输入框的行内空间 */
+@media (max-width: 380px) {
+  .hoop { width: 72px; right: 2px; }
+  .shot-dock { padding: 0 6px; }
+  .shot-dock-text { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 语义不变：不做抛物线、不做粒子，球原地 200ms 淡出（由 shot.mjs 驱动），消息直接淡入 */
+  .hoop-breathe,
+  .shot-dock-ball { animation: none; }
+  .shot-ghost,
+  .shot-particle,
+  .shot-halo { display: none; }
+  .bubble[data-fresh="1"] { animation: fade-in 200ms var(--ease-out) both; }
+  #resultPop .modal-card { animation: result-pop-in-flat 160ms var(--ease-out) both; }
+  #resultPop .modal-card::after { animation: none; opacity: 0; }
+}
+@keyframes result-pop-in-flat {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

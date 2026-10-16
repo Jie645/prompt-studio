@@ -73,6 +73,10 @@
         <textarea id="chatAnswer" name="chatAnswer" rows="2" autocomplete="off" spellcheck="false" placeholder="回答上面 1-3 个问题；也可以直接说「你决定」"></textarea>
         <div class="chat-input-actions">
           <span class="chat-hint">Ctrl / ⌘ + Enter 发送</span>
+          <button type="button" class="shot-dock" id="shotDockChat" hidden aria-label="把这个回答投进篮筐">
+            <span class="shot-dock-ball" data-variant="violet" aria-hidden="true"></span>
+            <span class="shot-dock-text"></span>
+          </button>
           <button type="button" class="ghost" id="chatSkipRound">这轮跳过</button>
           <button type="button" class="primary compact" id="chatSend">发送回答</button>
         </div>
@@ -103,6 +107,7 @@
           <button type="button" class="ghost tiny" id="copyPrompt" disabled>复制</button>
           <button type="button" class="ghost tiny" id="expandEditor">全屏</button>
           <button type="button" class="ghost tiny" id="exportPrompt" disabled>导出为文档</button>
+          <button type="button" class="ghost tiny" id="viewResult" hidden>查看结果</button>
         </div>
       </div>
 
@@ -153,6 +158,44 @@
 
 <footer class="composer" aria-label="输入区">
   <div class="composer-col">
+
+    <!--
+      篮筐：全局只有一个，固定在输入卡右上角外侧（压在卡片上沿，永远在视口内）。
+      viewBox 0 0 120 108 —— 篮圈中心固定在 (60, 68)，shot.mjs 按这个比例换算落点。
+      造型：圆角矩形篮板 + 椭圆篮圈 + 9 条交叉弧线编成的网。
+    -->
+    <div id="hoop" class="hoop" data-state="idle" data-variant="energy" data-flash="" aria-hidden="true">
+      <div class="hoop-breathe">
+        <svg class="hoop-svg" viewBox="0 0 120 108" fill="none" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="hoopRimEnergy" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#4dd8e8"/>
+              <stop offset="1" stop-color="#8b7cff"/>
+            </linearGradient>
+            <linearGradient id="hoopRimClassic" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#ff8a3d"/>
+              <stop offset="1" stop-color="#f0b64a"/>
+            </linearGradient>
+          </defs>
+          <rect class="hoop-board" x="16" y="4" width="88" height="58" rx="10"/>
+          <path class="hoop-brace" d="M60 62v7"/>
+          <g class="hoop-net">
+            <path d="M60.0 58.0 Q69.2 81.3 66.5 104.6"/>
+            <path d="M81.9 60.3 Q73.7 82.5 53.5 104.6"/>
+            <path d="M93.5 66.3 Q74.5 84.1 43.5 102.0"/>
+            <path d="M89.4 73.0 Q71.4 85.5 41.3 98.0"/>
+            <path d="M71.6 77.4 Q65.7 85.9 47.8 94.4"/>
+            <path d="M48.4 77.4 Q60.2 85.2 60.0 93.0"/>
+            <path d="M30.6 73.0 Q57.4 83.7 72.2 94.4"/>
+            <path d="M26.5 66.3 Q58.6 82.1 78.7 98.0"/>
+            <path d="M38.1 60.3 Q63.3 81.2 76.5 102.0"/>
+            <ellipse class="hoop-net-hem" cx="60" cy="99" rx="19" ry="6"/>
+          </g>
+          <ellipse class="hoop-rim" cx="60" cy="68" rx="34" ry="10"/>
+        </svg>
+      </div>
+      <div class="hoop-loader" aria-hidden="true"></div>
+    </div>
 
     <div class="tray" id="tray" hidden role="menu" aria-label="功能菜单">
       <div class="tray-head">
@@ -212,6 +255,30 @@
           <span class="tray-entry-title">历史会话</span>
           <span class="tray-entry-hint" id="trayHistoryCount">0 条 · 可载入或删除</span>
         </button>
+        <label class="toggle tray-toggle">
+          <input type="checkbox" id="shotClassic">
+          <span class="toggle-track" aria-hidden="true"><span class="toggle-knob"></span></span>
+          <span class="toggle-copy">
+            <strong>经典橙篮筐</strong>
+            <em>橘色篮板 + 橙色篮圈（参考视频那版）；默认走站点能量色</em>
+          </span>
+        </label>
+        <label class="toggle tray-toggle">
+          <input type="checkbox" id="shotSound">
+          <span class="toggle-track" aria-hidden="true"><span class="toggle-knob"></span></span>
+          <span class="toggle-copy">
+            <strong>入网音效</strong>
+            <em>入网时合成一声很轻的「唰」；默认关闭，打开后才创建音频上下文</em>
+          </span>
+        </label>
+        <label class="toggle tray-toggle">
+          <input type="checkbox" id="shotAutoPop" checked>
+          <span class="toggle-track" aria-hidden="true"><span class="toggle-knob"></span></span>
+          <span class="toggle-copy">
+            <strong>生成完成后自动弹出结果</strong>
+            <em>关掉之后改为在结果卡片上点「查看结果」打开同一个弹窗</em>
+          </span>
+        </label>
       </div>
 
       <div class="tray-group">
@@ -260,6 +327,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true" class="ic"><path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           功能
         </button>
+        <button type="button" class="shot-dock" id="shotDock" hidden aria-label="把这句话投进篮筐">
+          <span class="shot-dock-ball" data-variant="cyan" aria-hidden="true"></span>
+          <span class="shot-dock-text"></span>
+        </button>
         <span class="meter" id="meter">0 字 · ~0 tokens</span>
         <button type="submit" class="primary compact" id="sendBtn">发送</button>
       </div>
@@ -274,6 +345,41 @@
     </div>
   </div>
 </footer>
+
+<!--
+  投掷层：position: fixed / inset: 0 / pointer-events: none。
+  层级夹在输入卡（--z-composer 30）之上、托盘（--z-tray 40）与弹窗（--z-modal 60）之下。
+  球、残影、粒子、光环都挂在这里，全部只动 transform / opacity。
+  注意：必须挂在 body 下，不能放进 footer.composer —— 那里的 backdrop-filter 会把 fixed 变成局部包含块。
+-->
+<div class="shot-layer" id="shotLayer" aria-hidden="true"></div>
+
+<!-- 结果弹窗：跑完 analyze → compose → critique → revise 之后自动弹出（可在「功能 → 进阶」里关掉） -->
+<div class="modal" id="resultPop" hidden>
+  <div class="modal-card result-pop" role="dialog" aria-modal="true" aria-labelledby="resultPopTitle">
+    <header class="modal-head">
+      <h2 id="resultPopTitle">这次投篮的结果</h2>
+      <span class="score-chip" id="resultPopScore" hidden></span>
+      <span class="meter" id="resultPopMeter">0 字 · ~0 tokens</span>
+      <button type="button" class="icon-btn" id="resultPopClose" aria-label="关闭结果弹窗">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <div class="result-pop-models" id="resultPopModels" hidden></div>
+      <pre class="result-pop-text" id="resultPopText" tabindex="0"></pre>
+    </div>
+    <footer class="result-pop-actions">
+      <button type="button" class="primary compact" id="resultPopCopy">复制提示词</button>
+      <button type="button" class="ghost" id="resultPopExport">导出为文档</button>
+      <button type="button" class="ghost" id="resultPopExpand">全屏编辑</button>
+      <button type="button" class="ghost" id="resultPopVars">变量填充</button>
+      <button type="button" class="ghost" id="resultPopUse" hidden>用这版</button>
+      <button type="button" class="ghost" id="resultPopRegen">重新生成</button>
+      <button type="button" class="ghost" id="resultPopDismiss">关闭</button>
+    </footer>
+  </div>
+</div>
 
 <div class="modal" id="profileForm" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="pfTitle">

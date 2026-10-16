@@ -6,6 +6,7 @@ import {
 } from "./prompt-engine.mjs";
 import { extractDelta, extractText, extractUsage } from "./adapters.mjs";
 import { initProfiles, loadProfiles, profileState, renderProfiles, selectedProfiles, setMode, pickProfile, testProfile, closeForm } from "./profiles.js";
+import { mountShot } from "./shot.mjs";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -35,6 +36,17 @@ const state = {
   sessions: [],
   serverAlive: true,
 };
+
+/* ------------------------------------------------------------------ */
+/* 投篮交互：设置与模块句柄（动效全部在 shot.mjs，这里只做接线）           */
+/* ------------------------------------------------------------------ */
+
+const LS_SHOT = "prompt-studio.shot.v1";
+const shotPrefs = Object.assign({ classic: false, sound: false, autoPop: true }, loadJson(LS_SHOT, null) || {});
+let fsShot = null;         // shot.mjs 实例（boot 时挂载）
+let flight = null;         // 正在进行的投篮：请求照常在 t=0 发出，只有"上屏"要等它入网
+let heldPrompt = null;     // 球在空中时暂存的正文（入网后一次性上屏）
+let heldTimer = 0;
 
 /* ------------------------------------------------------------------ */
 /* small helpers                                                       */
@@ -227,6 +239,13 @@ async function runCall(call, onDelta, profile, collector) {
 const tick = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function setPrompt(text) {
+  /* 球还在空中：正文先攒着，入网之后再上屏（请求早已发出，这里只推迟"上屏"） */
+  if (flight) {
+    heldPrompt = text;
+    if (!heldTimer) heldTimer = setTimeout(flushHeldPrompt, 40);
+    return;
+  }
+  heldPrompt = null;      // 能直接上屏了：之前攒的那份作废，别让它回头盖掉更新的正文
   state.prompt = text;
   const editor = $("#promptOut");
   if (editor.value !== text) editor.value = text;
@@ -234,6 +253,18 @@ function setPrompt(text) {
   renderVars();
   applyView();
   scrollStream();
+}
+
+/** 入网后把攒住的正文放上屏（轮询到球落地为止，自身会收尾） */
+function flushHeldPrompt() {
+  heldTimer = 0;
+  if (flight) {
+    heldTimer = setTimeout(flushHeldPrompt, 40);
+    return;
+  }
+  const text = heldPrompt;
+  heldPrompt = null;
+  if (text !== null) setPrompt(text);
 }
 
 /** 计量：输入卡底部 + 结果卡片脚注各一份（同一份数字，两处显示） */
@@ -267,14 +298,18 @@ function markStagesError() {
   for (const name of STAGES) setStage(name, "error");
 }
 
-async function generate() {
+async function generate(shotOpts) {
   if (state.running) return;
   const raw = $("#raw").value.trim();
   if (!raw) {
+    shakeShot("raw", "cyan");                   // 空输入：球原地晃一下，不发请求
     log("先在下面的输入框里写一句话。", "error");
     $("#raw").focus();
     return;
   }
+  if (fsShot && fsShot.isFlying()) { log("球还在空中，等它入网。", ""); return; }
+  const shotFrom = (shotOpts && shotOpts.from) || "raw";
+  const shotVariant = (shotOpts && shotOpts.variant) || "cyan";
   const input = {
     raw,
     target: state.target,
@@ -289,7 +324,11 @@ async function generate() {
   state.running = true;
   document.body.classList.add("is-generating");
   const sendBtn = $("#sendBtn");
-  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "生成中…"; }
+  /* 投篮：t=0 起手，与下面的请求并行 —— 动画只是盖住网络延迟，不增加等待 */
+  const gate = launchShot(shotFrom, shotVariant);
+  if (fsShot) fsShot.setLoading(true);
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = gate ? "投篮中…" : "生成中…"; }
+  if (gate) gate.then(() => { if (sendBtn && state.running) sendBtn.textContent = "生成中…"; });
   state.prompt = "";
   state.analysis = null;
   state.critique = null;
@@ -399,13 +438,18 @@ async function generate() {
     }
     setPromptActions(true);
     saveSession();
+      afterResultReady();                       // 四个阶段都跑完了：按开关弹出结果弹窗
   } catch (err) {
     markStagesError();
+      if (fsShot) fsShot.fail();                // 失败：篮筐变红抖一下；错误照常进消息流
     log((err && err.message) || String(err), "error");
   } finally {
     state.running = false;
     document.body.classList.remove("is-generating");
-    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "发送"; }
+      if (fsShot) fsShot.setLoading(false);
+      const restore = () => { if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "发送"; } };
+      if (flight) waitFlight().then(restore);   // 球还在空中就先别把按钮恢复成「发送」
+      else restore();
     applyView();
   }
 }
@@ -615,11 +659,13 @@ function chatProfile() {
 async function startChat() {
   const input = chatInputSnapshot();
   if (!input.raw) {
+    shakeShot("raw", "cyan");                   // 空输入：球原地晃一下，不发请求
     log("先在下面的输入框里写一句话。", "error");
     showTab("chat");
     $("#raw").focus();
     return;
   }
+  if (fsShot && fsShot.isFlying()) { log("球还在空中，等它入网。", ""); return; }
   if (!profileState.list.length) {
     log("先在「＋ 功能 → 模型」里加一个接口（或用「跳过沟通，直接生成」走内置规则模式）。", "error");
     return;
@@ -648,7 +694,15 @@ async function startChat() {
   renderVars();
   showTab("chat");
   renderChat();
-  await askTurn();
+  syncShotDocks();
+
+  /* 投篮：t=0 起手，同一时刻发出请求（动画与请求并行，不让动画拖慢网络） */
+  const gate = launchShot("raw", "cyan");
+  const req = askTurn();
+  if (gate) await gate;                         // 入网
+  state.chat.echo = { role: "user", text: input.raw, at: Date.now(), freshAt: Date.now() };
+  renderChat();                                 // 用户气泡从篮筐方向弹入消息流
+  await req;
 }
 
 async function askTurn() {
@@ -670,6 +724,7 @@ async function askTurn() {
     const bubbleText = questions.length
       ? questions.map((q, i) => (i + 1) + ". " + (q.question || "") + (q.why ? "（" + q.why + "）" : "")).join("\n")
       : (parsed.ready || "信息已收集完毕，可以点击生成。");
+      await waitFlight();                       // 球还在空中就等一下再上屏（请求早已发出）
     chat.messages.push({
       role: "assistant",
       at: Date.now(),
@@ -698,13 +753,24 @@ async function sendAnswer(skip) {
   const box = $("#chatAnswer");
   const answer = skip ? "（这轮跳过，你按默认决定）" : box.value.trim();
   if (!answer) {
+    shakeShot("chat", "violet");                // 空输入：球原地晃一下，不发请求
     log("先写一句回答，或者点「这轮跳过」。", "error");
     return;
   }
+  if (fsShot && fsShot.isFlying()) { log("球还在空中，等它入网。", ""); return; }
   chat.messages.push({ role: "user", at: Date.now(), text: answer });
+  chat.messages[chat.messages.length - 1].freshAt = Date.now();
   box.value = "";
-  renderChat();
-  await askTurn();
+  syncShotDocks();
+
+  /* 「这轮跳过」不投篮：球就地滚回去退场；其余回答照常投出 */
+  const gate = skip
+    ? (fsShot ? fsShot.rollBack({ fromEl: shotOrigin("chat"), variant: "violet" }) : Promise.resolve("noop"))
+    : launchShot("chat", "violet");
+  const req = askTurn();
+  if (gate) await gate;
+  renderChat();                                 // 入网之后气泡才从篮筐方向弹入
+  await req;
 }
 
 function setChatBusy(busy) {
@@ -719,6 +785,8 @@ function setChatBusy(busy) {
 function bubbleHtml(m, index, total) {
   const mine = m.role === "user";
   const isLastAssistant = !mine && index === total - 1;
+  /* 刚入网的那条气泡：入场从篮筐方向弹进来（700ms 内重绘仍然算"新"） */
+  const fresh = m.freshAt && Date.now() - m.freshAt < 700;
   let inner = escapeHtml(m.text).replace(/\n/g, "<br>");
   if (!mine && isLastAssistant && m.questions && m.questions.length) {
     const chips = m.questions.flatMap((q) => (q.options || []).slice(0, 4));
@@ -730,7 +798,7 @@ function bubbleHtml(m, index, total) {
   if (!mine && isLastAssistant && m.missing && m.missing.length) {
     inner += '<div class="chat-missing">' + m.missing.map((x) => escapeHtml(x)).join(" · ") + "</div>";
   }
-  return '<div class="bubble ' + (mine ? "bubble-me" : "bubble-ai") + '">' +
+  return '<div class="bubble ' + (mine ? "bubble-me" : "bubble-ai") + '"' + (fresh ? ' data-fresh="1"' : "") + ">" +
     '<span class="bubble-role">' + (mine ? "你" : "AI") + "</span>" + inner + "</div>";
 }
 
@@ -754,7 +822,10 @@ function renderChat() {
     return;
   }
 
-  logEl.innerHTML = chat.messages.map((m, i) => bubbleHtml(m, i, chat.messages.length)).join("") ||
+  /* 需求回显：投篮入网后弹进来的「你」那条气泡，只用于展示，不写进 chat.messages，
+     所以 buildAskCall / buildComposeCall 拿到的沟通记录一个字节都没变。 */
+  const items = chat.echo ? [chat.echo].concat(chat.messages) : chat.messages;
+  logEl.innerHTML = items.map((m, i) => bubbleHtml(m, i, items.length)).join("") ||
     '<div class="chat-empty">AI 正在准备第一个问题…</div>';
   for (const btn of logEl.querySelectorAll("button[data-answer]")) {
     btn.addEventListener("click", () => {
@@ -1290,6 +1361,7 @@ async function doCopyPrompt() {
 
 /** 清空这次对话：沟通记录、生成结果、解析、变量全部复位 */
 function clearConversation() {
+  closeResultPop();
   state.chat = null;
   state.activeChat = null;
   state.critique = null;
@@ -1304,6 +1376,8 @@ function clearConversation() {
   renderAnalysis(null);
   setPromptActions(false);
   resetStages(false);
+  syncViewResultBtn();
+  syncShotDocks();
   log("已清空对话，可以重新开始。", "");
 }
 
@@ -1332,6 +1406,213 @@ function togglePreviewView() {
 }
 
 /* ---------- 上拉功能菜单 ---------- */
+
+/* ------------------------------------------------------------------ */
+/* 投篮交互：接线（"投什么、入网之后做什么"；运动本身在 shot.mjs）           */
+/* ------------------------------------------------------------------ */
+
+/** 待发球上的输入预览：超过 14 个字符显示前 14 字 + … */
+function shotPreview(text) {
+  const t = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  return t.length > 14 ? t.slice(0, 14) + "…" : t;
+}
+
+function syncDock(el, text) {
+  if (!el) return;
+  const preview = shotPreview(text);
+  el.hidden = !preview;                       // 空输入不显示球
+  if (!preview) return;
+  const label = el.querySelector(".shot-dock-text");
+  if (label) label.textContent = preview;
+}
+
+/** 两个输入框左下角的待发球（主输入框 / 沟通回答框） */
+function syncShotDocks() {
+  syncDock($("#shotDock"), $("#raw").value);
+  syncDock($("#shotDockChat"), $("#chatAnswer").value);
+}
+
+/** 投篮起点：主输入框 / 沟通回答框 / 正文编辑器（重新生成时是一记"远投"） */
+function shotOrigin(kind) {
+  if (kind === "chat") return $("#shotDockChat") || $("#chatAnswer");
+  if (kind === "editor") return $("#promptOut") || $("#shotDock");
+  return $("#shotDock") || $("#raw");
+}
+
+function waitFlight() { return flight || Promise.resolve("none"); }
+
+/**
+ * 投一颗球：t=0 起手，返回的 Promise 在入网（含收尾）后 resolve。
+ * 已经有球在空中时返回 null —— 调用方据此拦掉重复提交（并给一行轻提示）。
+ */
+function launchShot(kind, variant) {
+  if (!fsShot) return Promise.resolve("noop");
+  if (fsShot.isFlying()) {
+    log("球还在空中，等它入网。", "");
+    return null;
+  }
+  const p = fsShot.throwBall({ fromEl: shotOrigin(kind), variant });
+  flight = p;
+  p.then(() => { if (flight === p) flight = null; });
+  return p;
+}
+
+/** 空输入：球原地晃一下 + 提示，不发任何请求 */
+function shakeShot(kind, variant) {
+  if (!fsShot) return;
+  fsShot.shake({ fromEl: shotOrigin(kind), variant });
+}
+
+/** "查看结果"按钮：自动弹出关掉之后才需要它 */
+function syncViewResultBtn() {
+  const btn = $("#viewResult");
+  if (!btn) return;
+  const has = Boolean(resultPopText().trim());   // 多模型模式下正文在各列里，不在 state.prompt
+  btn.hidden = shotPrefs.autoPop || !has;
+}
+
+function syncShotToggles() {
+  const classic = $("#shotClassic");
+  if (classic) classic.checked = Boolean(shotPrefs.classic);
+  const sound = $("#shotSound");
+  if (sound) sound.checked = Boolean(shotPrefs.sound);
+  const autoPop = $("#shotAutoPop");
+  if (autoPop) autoPop.checked = Boolean(shotPrefs.autoPop);
+  syncViewResultBtn();
+}
+
+/* ---------- 结果弹窗 ---------- */
+
+function resultPopColHtml(c, i) {
+  const active = i === modelState.active ? ' data-active="true"' : "";
+  const body = c.status === "error"
+    ? (c.error || "调用失败")
+    : (c.text || (c.status === "pending" ? "排队中…" : ""));
+  return '<article class="rp-col" data-index="' + i + '"' + active + '>' +
+    '<div class="rp-col-head">' +
+      '<span class="rp-col-name" title="' + escapeHtml(c.profile.name) + '">' + escapeHtml(c.profile.name) + "</span>" +
+      '<span class="rp-col-meta">' + escapeHtml(metaText(c)) + "</span>" +
+      '<span class="rp-col-actions">' +
+        '<button type="button" class="ghost tiny" data-rp-act="use">用这版</button>' +
+        '<button type="button" class="ghost tiny" data-rp-act="copy">复制这版</button>' +
+      "</span>" +
+    "</div>" +
+    '<pre class="rp-col-text">' + escapeHtml(body) + "</pre>" +
+  "</article>";
+}
+
+/** 弹窗里当前该显示的那份正文（多模型模式下跟着选中的那一列走） */
+function resultPopText() {
+  if (profileState.mode === "compare" && modelState.cols.length) {
+    return ((modelState.cols[modelState.active] || {}).text) || "";
+  }
+  return state.prompt || "";
+}
+
+function renderResultPop() {
+  const multi = profileState.mode === "compare" && modelState.cols.length > 0;
+  const text = resultPopText();
+
+  const score = $("#resultPopScore");
+  if (score) {
+    const c = state.critique;
+    if (c) {
+      const s = scoreOf(c);
+      score.hidden = false;
+      score.dataset.band = band(s);
+      score.textContent = "自评 " + s.toFixed(1) + (state.rounds.length ? " · " + state.rounds.length + " 轮" : "");
+      score.title = state.stopReason ? "停止原因：" + state.stopReason : "";
+    } else {
+      score.hidden = true;
+      score.textContent = "";
+      score.title = "";
+    }
+  }
+
+  const meter = $("#resultPopMeter");
+  if (meter) meter.textContent = text.length + " 字 · ~" + estimateTokens(text) + " tokens";
+
+  const models = $("#resultPopModels");
+  if (models) {
+    models.hidden = !multi;
+    models.dataset.cols = String(Math.min(modelState.cols.length, 3));
+    models.innerHTML = multi ? modelState.cols.map((c, i) => resultPopColHtml(c, i)).join("") : "";
+    for (const btn of models.querySelectorAll("button[data-rp-act]")) {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const card = btn.closest(".rp-col");
+        const index = card ? Number(card.dataset.index) : 0;
+        modelState.active = index;
+        syncModelFocus();
+        if (btn.dataset.rpAct === "use") useColumn(index);
+        else copyColumn(index);
+        renderResultPop();
+      });
+    }
+  }
+
+  const body = $("#resultPopText");
+  if (body) body.textContent = text;
+
+  const use = $("#resultPopUse");
+  if (use) use.hidden = !multi;
+  const exp = $("#resultPopExport");
+  if (exp) exp.disabled = !text.trim();
+  const copy = $("#resultPopCopy");
+  if (copy) { copy.disabled = !text.trim(); copy.textContent = "复制提示词"; }
+}
+
+function openResultPop(trigger) {
+  const modal = $("#resultPop");
+  if (!modal) return;
+  if (!resultPopText().trim()) {
+    log("还没有可看的结果，先投一次球。", "");
+    return;
+  }
+  lastModalFocus = trigger || document.activeElement;
+  closeTray();
+  closePop();
+  renderResultPop();
+  modal.hidden = false;
+  document.body.classList.add("has-result-pop");
+  const copy = $("#resultPopCopy");
+  if (copy && copy.focus) copy.focus();       // 焦点落在主按钮上
+}
+
+function closeResultPop() {
+  const modal = $("#resultPop");
+  if (!modal || modal.hidden) return;
+  modal.hidden = true;
+  document.body.classList.remove("has-result-pop");
+  if (lastModalFocus && lastModalFocus.focus) lastModalFocus.focus();
+  lastModalFocus = null;
+}
+
+/** 跑完流水线：自动弹结果，或把结果卡片上的「查看结果」亮出来 */
+async function afterResultReady() {
+  /* 响应比动画快的时候，正文还攒在闸门后面 —— 等球入网、把正文放出来，再谈结果 */
+  await waitFlight();
+  if (heldPrompt !== null) flushHeldPrompt();
+  syncViewResultBtn();
+  if (!shotPrefs.autoPop) return;
+  openResultPop(document.activeElement);
+}
+
+/** 变量填充：展开变量区并滚过去（弹窗里点「变量填充」时用） */
+function revealVars() {
+  if (!extractVariables(resultPopText()).length) {
+    log("这份提示词里没有 {{变量}}，不需要填充。", "");
+    return;
+  }
+  const block = document.querySelector(".card-result details.fold-block");
+  if (block) {
+    block.open = true;
+    if (block.scrollIntoView) block.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  const input = $("#varsOut input[data-var-input]");
+  if (input && input.focus) input.focus();
+}
 
 function syncTrayAria(open) {
   const toggle = $("#trayToggle");
@@ -1465,7 +1746,7 @@ function closeModal(sel) {
 
 /** 当前可见的模态（Esc / 点击遮罩时要逐层退出） */
 function visibleModal() {
-  for (const id of ["#profileForm", "#metaPanel", "#historyPanel"]) {
+  for (const id of ["#profileForm", "#resultPop", "#metaPanel", "#historyPanel"]) {
     const el = $(id);
     if (el && !el.hidden) return id;
   }
@@ -1476,6 +1757,7 @@ function closeVisibleModal() {
   const id = visibleModal();
   if (!id) return;
   if (id === "#profileForm") closeForm();       // 接口表单由 profiles.js 管理开合
+  else if (id === "#resultPop") closeResultPop();
   else closeModal(id);
 }
 
@@ -1530,7 +1812,12 @@ function bindEvents() {
   });
 
   editor.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); generate(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        /* 从正文区重新生成 = 一记远投（能量球） */
+        generate({ from: "editor", variant: "energy" });
+        return;
+      }
     const tab = "  ";
     if (e.key === "Tab") {
       e.preventDefault();
@@ -1571,6 +1858,7 @@ function bindEvents() {
   let rawHadText = raw.value.trim().length > 0;
   raw.addEventListener("input", () => {
     autogrow(raw);                       // 输入框 1~8 行自动增高
+      syncShotDocks();                     // 待发球上的截断预览跟着输入走
     const hasText = raw.value.trim().length > 0;
     if (hasText) { rawHadText = true; return; }
     if (rawHadText) {
@@ -1592,7 +1880,7 @@ function bindEvents() {
     closeTray();
     state.activeChat = null;
     showTab("prompt");
-    generate();
+      generate({ from: "raw", variant: "cyan" });
   });
   $("#chatSend").addEventListener("click", () => sendAnswer(false));
   $("#chatSkipRound").addEventListener("click", () => sendAnswer(true));
@@ -1606,7 +1894,7 @@ function bindEvents() {
     state.activeChat = state.chat;
     renderChat();
     showTab("prompt");
-    generate();
+      generate({ from: "chat", variant: "energy" });
   });
   $("#chatRestart").addEventListener("click", () => {
     state.chat = null;
@@ -1667,6 +1955,7 @@ function bindEvents() {
       raw.value = btn.dataset.example;
       raw.focus();
       autogrow(raw);
+        syncShotDocks();
     });
   }
 
@@ -1686,11 +1975,12 @@ function bindEvents() {
   $("#openHistory").addEventListener("click", () => openModal("#historyPanel"));
   $("#metaClose").addEventListener("click", () => closeModal("#metaPanel"));
   $("#historyClose").addEventListener("click", () => closeModal("#historyPanel"));
-  for (const id of ["#profileForm", "#metaPanel", "#historyPanel"]) {
+    for (const id of ["#profileForm", "#resultPop", "#metaPanel", "#historyPanel"]) {
     const el = $(id);
     if (el) el.addEventListener("click", (e) => {
       if (e.target !== el) return;                 // 只处理"点遮罩空白处"
       if (id === "#profileForm") closeForm();
+        else if (id === "#resultPop") closeResultPop();
       else closeModal(id);
     });
   }
@@ -1716,6 +2006,69 @@ function bindEvents() {
   $("#logBar").addEventListener("click", () => {
     const bar = $("#logBar");
     bar.dataset.open = bar.dataset.open === "true" ? "false" : "true";
+  });
+
+  // ---- 投篮：待发球 / 开关 / 结果弹窗 ----
+  $("#shotDock").addEventListener("click", () => startChat());
+  $("#shotDockChat").addEventListener("click", () => sendAnswer(false));
+  $("#chatAnswer").addEventListener("input", () => syncShotDocks());
+
+  $("#shotClassic").addEventListener("change", (e) => {
+    shotPrefs.classic = e.target.checked;
+    if (fsShot) fsShot.setVariant(shotPrefs.classic ? "classic" : "energy");
+    saveJson(LS_SHOT, shotPrefs);
+    log(shotPrefs.classic ? "篮筐换成经典橙。" : "篮筐换回站点能量色。", "ok");
+  });
+  $("#shotSound").addEventListener("change", (e) => {
+    shotPrefs.sound = e.target.checked;
+    if (fsShot) fsShot.setSound(shotPrefs.sound);
+    saveJson(LS_SHOT, shotPrefs);
+    log(shotPrefs.sound ? "入网音效已打开（首次入网时才创建音频上下文）。" : "入网音效已关闭。", "");
+  });
+  $("#shotAutoPop").addEventListener("change", (e) => {
+    shotPrefs.autoPop = e.target.checked;
+    saveJson(LS_SHOT, shotPrefs);
+    syncViewResultBtn();
+    log(shotPrefs.autoPop
+      ? "生成完成后会自动弹出结果弹窗。"
+      : "生成完成后不再自动弹窗，可在结果卡片上点「查看结果」。", "");
+  });
+
+  $("#viewResult").addEventListener("click", (e) => openResultPop(e.currentTarget));
+  $("#resultPopClose").addEventListener("click", () => closeResultPop());
+  $("#resultPopDismiss").addEventListener("click", () => closeResultPop());
+  $("#resultPopExport").addEventListener("click", () => { exportPrompt(); });
+  $("#resultPopExpand").addEventListener("click", () => {
+    closeResultPop();
+    toggleFullscreen(true);
+  });
+  $("#resultPopVars").addEventListener("click", () => {
+    closeResultPop();
+    revealVars();
+  });
+  $("#resultPopUse").addEventListener("click", () => {
+    useColumn(modelState.active);
+    renderResultPop();
+  });
+  $("#resultPopRegen").addEventListener("click", () => {
+    closeResultPop();
+    generate({ from: "editor", variant: "energy" });   // 重新生成也走投篮动画
+  });
+  $("#resultPopCopy").addEventListener("click", async () => {
+    const btn = $("#resultPopCopy");
+    const ok = await copyText(resultPopText());
+    if (ok) {
+      log("提示词已复制到剪贴板。", "ok");
+      if (btn) {
+        btn.textContent = "已复制 ✓";
+        btn.disabled = true;
+        setTimeout(() => { btn.textContent = "复制提示词"; btn.disabled = false; }, 800);
+      }
+    } else {
+      log("浏览器拒绝了自动复制。弹窗里的正文可以直接选中复制。", "error");
+      const body = $("#resultPopText");
+      if (body && body.focus) body.focus();
+    }
   });
 }
 
@@ -1871,6 +2224,12 @@ async function boot() {
   syncLengthSelect();
 
   bindEvents();
+  /* 投篮交互：挂上动效模块（几何、粒子池、篮筐状态机都在 shot.mjs 里） */
+  fsShot = mountShot({ layerEl: $("#shotLayer"), hoopEl: $("#hoop") });
+  fsShot.setVariant(shotPrefs.classic ? "classic" : "energy");
+  fsShot.setSound(shotPrefs.sound);
+  syncShotToggles();
+  syncShotDocks();
   initStreamFollow();
   renderVars();
   resetStages(false);
