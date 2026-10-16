@@ -667,7 +667,14 @@ async function startChat() {
   }
   if (fsShot && fsShot.isFlying()) { log("球还在空中，等它入网。", ""); return; }
   if (!profileState.list.length) {
+    /* 没有可用接口（GitHub Pages 上的纯静态演示版就是这种）：球照样投出去，
+       落地之后再按「失败」如实报红 —— 让这一步的动作与结果都看得见，而不是毫无反应。 */
+    const gate = launchShot("raw", "cyan");
     log("先在「＋ 功能 → 模型」里加一个接口（或用「跳过沟通，直接生成」走内置规则模式）。", "error");
+    if (fsShot) {
+      if (gate) gate.then(() => fsShot.fail());
+      else fsShot.fail();
+    }
     return;
   }
   const meta = readMeta();
