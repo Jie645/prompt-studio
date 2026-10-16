@@ -105,7 +105,6 @@ export function mountShot(options = {}) {
     reduced: false,
     pendingFail: false,
     rafId: 0,
-    particles: [],
     pool: null,
     hoopTimer: 0,
     flashTimer: 0,
@@ -525,18 +524,15 @@ export function mountShot(options = {}) {
   const api = {
     /** 当前是否有一颗球在飞（用于"球还在空中"的防重复） */
     isFlying() { return state.flying; },
-    isReduced() { return state.reduced; },
 
     /** energy | classic —— 篮筐配色（默认 energy，跟站点能量色一致） */
     setVariant(next) {
       view.variant = next === "classic" ? "classic" : "energy";
       if (hoopEl) hoopEl.dataset.variant = view.variant;
     },
-    getVariant() { return view.variant; },
 
     /** 入网音效开关（默认关闭，打开后才懒加载 AudioContext） */
     setSound(on) { view.sound = Boolean(on); },
-    getSound() { return view.sound; },
 
     /** 生成中：筐内旋转能量环 */
     setLoading(on) {
@@ -554,8 +550,7 @@ export function mountShot(options = {}) {
      * 投篮：从 fromEl 的位置沿抛物线飞向篮筐。
      * @returns {Promise<string>} 入网（含收尾）后 resolve；"busy" 表示已有球在空中
      */
-    throwBall({ fromEl = null, variant = "cyan", text = "" } = {}) {
-      void text;
+    throwBall({ fromEl = null, variant = "cyan" } = {}) {
       if (state.flying) return Promise.resolve("busy");
       state.reduced = prefersReduced();
       const from = centerOf(fromEl) || fallbackRim();
