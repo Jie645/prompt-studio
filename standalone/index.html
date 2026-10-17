@@ -256,6 +256,15 @@ Error generating stack: `+e.message+`
   .menuToggle small{white-space:normal;text-align:right;line-height:1.35}
 }
 </style>
+<style id="pwModelSetup">
+.mAdvanced{border:1px solid var(--line);border-radius:var(--r10);padding:0 12px;background:#96b4ff08}
+.mAdvanced summary{cursor:pointer;color:var(--ink3);font-size:11.5px;line-height:40px;list-style:none}
+.mAdvanced summary::-webkit-details-marker{display:none}
+.mAdvanced summary:after{content:"＋";float:right;color:var(--cy)}
+.mAdvanced[open] summary:after{content:"－"}
+.mAdvanced .mField{margin:0 0 12px}
+.mTestNote{min-height:18px;margin:0;font-size:11.5px;line-height:1.6;color:var(--ink3)}
+</style>
 </head>
 <body>
 
@@ -406,6 +415,10 @@ Error generating stack: `+e.message+`
   var topbar = document.querySelector(".topbar");
   var addModelBtn = el("addModel");
   var histNum = el("histNum");
+  /* 由安装包里的 server.mjs 在 8787 端口提供同源转发；直接打开 file:// 时为 false */
+  var LOCAL_PROXY = location.protocol === "http:" &&
+    (location.hostname === "127.0.0.1" || location.hostname === "localhost") &&
+    location.port === "8787";
 
   progBar.style.strokeDasharray = String(CIRC);
   progBar.style.strokeDashoffset = String(CIRC);
@@ -674,9 +687,63 @@ Error generating stack: `+e.message+`
     }
   }
 
+  var PROVIDER_PRESETS = {
+    custom: { name: "自定义接口", protocol: "openai", baseUrl: "", model: "" },
+    openai: {
+      name: "OpenAI", protocol: "openai",
+      baseUrl: "https://api.openai.com/v1", model: "gpt-4.1-mini"
+    },
+    deepseek: {
+      name: "DeepSeek", protocol: "openai",
+      baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat"
+    },
+    alibaba: {
+      name: "阿里云百炼", protocol: "openai",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus"
+    },
+    moonshot: {
+      name: "月之暗面 Kimi", protocol: "openai",
+      baseUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k"
+    },
+    zhipu: {
+      name: "智谱 GLM", protocol: "openai",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash"
+    },
+    anthropic: {
+      name: "Anthropic", protocol: "anthropic",
+      baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5"
+    },
+    ollama: {
+      name: "Ollama 本地", protocol: "openai",
+      baseUrl: "http://127.0.0.1:11434/v1", model: "qwen2.5:7b"
+    }
+  };
+
+  function normalizeBaseUrl(raw) {
+    var value = String(raw || "").trim().replace(/#.*$/, "");
+    if (!value) return "";
+    try {
+      var u = new URL(value);
+      var path = u.pathname.replace(/\/+$/, "");
+      /* 阿里云兼容模式常见漏写 /v1；补上后仍然可被 apiEndpoint 识别。 */
+      if (u.hostname === "dashscope.aliyuncs.com" && path === "/compatible-mode") path += "/v1";
+      if (!path) path = "/v1";
+      return u.origin + path;
+    } catch (e) {
+      return value.replace(/\/+$/, "");
+    }
+  }
+
+  function apiKind(profile) {
+    var base = String(profile && profile.baseUrl || "");
+    if ((profile && profile.protocol) === "anthropic" || /\/messages\/?$/.test(base)) return "anthropic";
+    if (/\/responses\/?$/.test(base)) return "responses";
+    return "openai";
+  }
+
   function apiEndpoint(profile, path) {
-    var base = String(profile.baseUrl || "").replace(/\/+$/, "");
-    if (/\/(chat\/completions|responses|messages)$/.test(base)) return base;
+    var base = normalizeBaseUrl(profile.baseUrl);
+    if (/\/(chat\/completions|responses|messages)\/?$/.test(base)) return base.replace(/\/+$/, "");
     return base + path;
   }
 
@@ -745,12 +812,22 @@ Error generating stack: `+e.message+`
     opts = opts || {};
     var stream = !!opts.stream;
     var budget = Math.max(256, Math.min(4096, opts.maxTokens || 1600));
-    if (profile.protocol === "anthropic") {
+    if (apiKind(profile) === "anthropic") {
       return {
         model: profile.modelId,
         system: system,
         messages: [{ role: "user", content: user }],
         max_tokens: budget,
+        temperature: 0.4,
+        stream: stream
+      };
+    }
+    if (apiKind(profile) === "responses") {
+      return {
+        model: profile.modelId,
+        instructions: system,
+        input: user,
+        max_output_tokens: budget,
         temperature: 0.4,
         stream: stream
       };
@@ -770,8 +847,13 @@ Error generating stack: `+e.message+`
   /* 从流式事件里抠出这一小段增量：OpenAI 与 Anthropic 的字段不一样 */
   function sseDelta(profile, obj) {
     if (!obj) return "";
-    if (profile.protocol === "anthropic") {
+    if (apiKind(profile) === "anthropic") {
       if (obj.type === "content_block_delta" && obj.delta) return obj.delta.text || "";
+      return "";
+    }
+    if (apiKind(profile) === "responses") {
+      if (obj.type === "response.output_text.delta" && typeof obj.delta === "string") return obj.delta;
+      if (obj.type === "response.output_text.done" && typeof obj.text === "string") return "";
       return "";
     }
     var c = obj.choices && obj.choices[0];
@@ -782,9 +864,20 @@ Error generating stack: `+e.message+`
   }
 
   function modelText(profile, json, raw) {
-    if (profile.protocol === "anthropic") {
+    if (apiKind(profile) === "anthropic") {
       var chunks = (json && json.content) || [];
       return chunks.map(function (c) { return c.text || ""; }).join("");
+    }
+    if (apiKind(profile) === "responses") {
+      if (json && typeof json.output_text === "string") return json.output_text;
+      if (json && Array.isArray(json.output)) {
+        return json.output.map(function (item) {
+          return (item.content || []).map(function (part) {
+            return part.text || "";
+          }).join("");
+        }).join("");
+      }
+      return raw || "";
     }
     var choice = json && json.choices && json.choices[0];
     if (choice) return (choice.message && choice.message.content) || choice.text || "";
@@ -867,7 +960,11 @@ Error generating stack: `+e.message+`
     }
 
     try {
-      var endpoint = apiEndpoint(profile, profile.protocol === "anthropic" ? "/messages" : "/chat/completions");
+      var kind = apiKind(profile);
+      var endpoint = apiEndpoint(
+        profile,
+        kind === "anthropic" ? "/messages" : kind === "responses" ? "/responses" : "/chat/completions"
+      );
       firstTimer = window.setTimeout(function () {
         if (firstAt) return;
         stopReason = "首字超时：" + Math.round(Math.min(NET.first, capMs) / 1000) + " 秒没等到第一个字";
@@ -879,15 +976,28 @@ Error generating stack: `+e.message+`
         ctrl.abort();
       }, capMs);
 
-      var resp = await fetch(endpoint, {
-        method: "POST",
-        headers: modelHeaders(profile, true),
-        body: JSON.stringify(modelBody(profile, system, user, {
-          stream: true,
-          maxTokens: opts.maxTokens
-        })),
-        signal: ctrl.signal
+      var reqHeaders = modelHeaders(profile, true);
+      var reqBody = modelBody(profile, system, user, {
+        stream: true,
+        maxTokens: opts.maxTokens
       });
+      var resp;
+      if (LOCAL_PROXY) {
+        /* 本地启动器负责转发，规避浏览器对云端接口的 CORS 限制。 */
+        resp = await fetch("/api/proxy", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: endpoint, headers: reqHeaders, body: reqBody }),
+          signal: ctrl.signal
+        });
+      } else {
+        resp = await fetch(endpoint, {
+          method: "POST",
+          headers: reqHeaders,
+          body: JSON.stringify(reqBody),
+          signal: ctrl.signal
+        });
+      }
       if (!resp.ok) throw new Error(await readApiError(resp));
       firstTimer = clearTimer(firstTimer);
 
@@ -957,7 +1067,7 @@ Error generating stack: `+e.message+`
       if (!partial.trim()) throw new Error("模型没有返回文本，可能被安全策略拦截。");
       lastCall.totalMs = Math.round(performance.now() - startedAt);
       lastCall.chars = partial.length;
-      if (partial.length < 60) {
+      if (partial.length < 60 && !opts.allowShort) {
         throw new Error("模型只返回了 " + partial.length + " 个字符，内容不完整，已改用离线规则。");
       }
       return partial.trim();
@@ -980,7 +1090,9 @@ Error generating stack: `+e.message+`
             : "生成被中断"));
       }
       if (err instanceof TypeError) {
-        throw new Error("浏览器无法直接连接该接口（CORS 限制或地址不可达）。可改用本地 Prompt Studio 服务，或换成允许跨域的网关。");
+        throw new Error(LOCAL_PROXY
+          ? "模型接口请求失败：地址不可达、证书异常，或本地代理未启动。"
+          : "浏览器从本地文件直接请求云端接口会被 CORS 拦截。请关闭本页，使用桌面 Prompt Studio Standalone 快捷方式启动本地代理后再测试。");
       }
       throw err;
     } finally {
@@ -1128,7 +1240,12 @@ Error generating stack: `+e.message+`
         var data = await resp.json();
         if (!data.ok) throw new Error(data.message || "连接失败");
       } else {
-        var reply = await callModelProfile(profile, "You are a connectivity probe.", "Reply with OK.");
+        var reply = await callModelProfile(
+          profile,
+          "You are a connectivity probe.",
+          "Reply with OK.",
+          { allowShort: true, maxTokens: 32 }
+        );
         if (!reply) throw new Error("接口没有返回文本。");
       }
       testNotice("连接成功 · " + Math.round(performance.now() - started) + "ms", false);
@@ -1147,7 +1264,7 @@ Error generating stack: `+e.message+`
     /* 静态托管上不存在本地服务：探测过一次就不再重复，避免每次首屏都等一次 404 */
     var NO_SERVER = "pw-no-server";
     try { if (sessionStorage.getItem(NO_SERVER) === "1") { serverAvailable = false; return; } } catch (e) {}
-    if (location.protocol === "file:" || /(^|\.)github\.io$/i.test(location.hostname)) {
+    if (LOCAL_PROXY || location.protocol === "file:" || /(^|\.)github\.io$/i.test(location.hostname)) {
       serverAvailable = false;
       return;
     }
@@ -2168,43 +2285,59 @@ Error generating stack: `+e.message+`
     if (state !== ST_IDLE) return;
     closePanel();
     var isEdit = !!(editing && editing.source === "local");
-    var storageHint = isEdit
-      ? "只修改这台设备上的配置；API Key 留空表示保持原来的密钥不变。"
-      : serverAvailable
-        ? "本地服务可用：接口配置会写入 data/profiles.json，API Key 由本机服务加密保存。"
-        : "当前是纯静态页面：配置与 API Key 只保存在本机浏览器。不要在不信任的设备上填写密钥。";
+    var storageHint = LOCAL_PROXY
+      ? "本地代理已启用：请求由本机转发，绕过浏览器 CORS；API Key 只保存在本机浏览器。"
+      : location.protocol === "file:"
+        ? "当前是 file:// 直开：云端接口可能被 CORS 拦截。请改用桌面 Prompt Studio Standalone 快捷方式启动本地代理。"
+        : "当前未检测到本地代理；部分云端接口可能被 CORS 拦截。";
     openSheet({
       kind: "model",
       title: isEdit ? "编辑模型" : "添加模型",
-      meta: isEdit ? "仅本机 · " + editing.name : (serverAvailable ? "本地服务 · 加密保存" : "本机浏览器"),
+      meta: isEdit ? "仅本机 · " + editing.name : (LOCAL_PROXY ? "本地代理" : "本机浏览器"),
       body:
         '<div class="modelForm">' +
-          '<div class="mField"><label for="mName">显示名称</label>' +
-            '<input id="mName" type="text" maxlength="32" autocomplete="off" ' +
-            'value="' + (isEdit ? esc(editing.name) : "") + '" ' +
-            'placeholder="例如：GPT-5 长文模型"></div>' +
+          '<div class="mField"><label for="mPreset">服务商模板</label>' +
+            '<select id="mPreset">' +
+              Object.keys(PROVIDER_PRESETS).map(function (key) {
+                return '<option value="' + key + '">' + esc(PROVIDER_PRESETS[key].name) + '</option>';
+              }).join("") +
+            '</select>' +
+            '<p class="mHint">选择服务商会自动填入接口地址和推荐模型，只需补 API Key。</p></div>' +
           '<div class="mField"><label for="mModelId">模型 ID</label>' +
-            '<input id="mModelId" type="text" maxlength="96" autocomplete="off" ' +
+            '<input id="mModelId" type="text" maxlength="96" autocomplete="off" list="mModelHints" ' +
             'value="' + (isEdit ? esc(editing.modelId) : "") + '" ' +
-            'placeholder="例如：gpt-5 / deepseek-chat"></div>' +
-          '<div class="mField"><label for="mProtocol">接口协议</label>' +
-            '<select id="mProtocol">' +
-              '<option value="openai">OpenAI 兼容</option>' +
-              '<option value="anthropic"' + (isEdit && editing.protocol === "anthropic" ? " selected" : "") +
-              '>Anthropic</option>' +
-            '</select></div>' +
-          '<div class="mField"><label for="mBaseUrl">接口地址</label>' +
-            '<input id="mBaseUrl" type="url" maxlength="240" autocomplete="off" ' +
-            'value="' + (isEdit ? esc(editing.baseUrl) : "") + '" ' +
-            'placeholder="https://api.example.com/v1"></div>' +
+            'placeholder="例如：qwen-plus / deepseek-chat / gpt-4.1-mini">' +
+            '<datalist id="mModelHints">' +
+              Object.keys(PROVIDER_PRESETS).map(function (key) {
+                var p = PROVIDER_PRESETS[key];
+                return p.model ? '<option value="' + esc(p.model) + '"></option>' : "";
+              }).join("") +
+            '</datalist></div>' +
           '<div class="mField"><label for="mApiKey">API Key</label>' +
             '<input id="mApiKey" type="password" maxlength="300" autocomplete="off" ' +
             'placeholder="' + (isEdit ? "留空则保持原密钥不变" : "sk-…（本地模型可留空）") + '"></div>' +
+          '<details class="mAdvanced"><summary>高级设置：名称、接口地址、协议</summary>' +
+            '<div class="mField"><label for="mName">显示名称（可自动生成）</label>' +
+              '<input id="mName" type="text" maxlength="32" autocomplete="off" ' +
+              'value="' + (isEdit ? esc(editing.name) : "") + '" ' +
+              'placeholder="不填则使用服务商 + 模型 ID"></div>' +
+            '<div class="mField"><label for="mBaseUrl">接口地址</label>' +
+              '<input id="mBaseUrl" type="url" maxlength="240" autocomplete="off" ' +
+              'value="' + (isEdit ? esc(editing.baseUrl) : "") + '" ' +
+              'placeholder="选择服务商后自动填入"></div>' +
+            '<div class="mField"><label for="mProtocol">接口协议</label>' +
+              '<select id="mProtocol">' +
+                '<option value="openai">OpenAI 兼容</option>' +
+                '<option value="anthropic"' + (isEdit && editing.protocol === "anthropic" ? " selected" : "") + '>Anthropic</option>' +
+              '</select></div>' +
+          '</details>' +
           '<p class="mHint">' + storageHint + '</p>' +
+          '<p class="mTestNote" id="mTestNote" role="status" aria-live="polite"></p>' +
           '<p class="mError" id="mError" role="alert" aria-live="assertive" hidden></p>' +
         "</div>",
       foot:
         '<button class="btn ghost" id="btnCancelModel" type="button">取消</button>' +
+        '<button class="btn ghost" id="btnTestDraft" type="button">测试连接</button>' +
         '<button class="btn primary" id="btnSaveModel" type="button">' +
         (isEdit ? "保存修改" : "保存模型") + '</button>',
       after: function () {
@@ -2213,8 +2346,44 @@ Error generating stack: `+e.message+`
         var baseEl = el("mBaseUrl");
         var protocolEl = el("mProtocol");
         var keyEl = el("mApiKey");
+        var presetEl = el("mPreset");
+        var testNote = el("mTestNote");
         var errorEl = el("mError");
         var saveBtn = el("btnSaveModel");
+        var testBtn = el("btnTestDraft");
+
+        function applyPreset(key) {
+          var preset = PROVIDER_PRESETS[key];
+          if (!preset || key === "custom") return;
+          protocolEl.value = preset.protocol;
+          if (preset.baseUrl) baseEl.value = preset.baseUrl;
+          if (preset.model) modelEl.value = preset.model;
+          if (!nameEl.value.trim()) {
+            nameEl.value = preset.name + (preset.model ? " · " + preset.model : "");
+          }
+          if (testNote) testNote.textContent = "";
+        }
+        presetEl.value = isEdit ? "custom" : "custom";
+        presetEl.addEventListener("change", function () {
+          applyPreset(presetEl.value);
+        });
+
+        function draftProfile() {
+          var preset = PROVIDER_PRESETS[presetEl.value] || PROVIDER_PRESETS.custom;
+          var modelId = modelEl.value.trim() || preset.model;
+          var baseUrl = normalizeBaseUrl(baseEl.value.trim() || preset.baseUrl);
+          var name = nameEl.value.trim() || (preset.name + (modelId ? " · " + modelId : ""));
+          return {
+            key: isEdit ? editing.key : "local:draft",
+            id: isEdit ? editing.id : "draft",
+            source: "local",
+            name: name,
+            modelId: modelId,
+            baseUrl: baseUrl,
+            protocol: protocolEl.value || preset.protocol,
+            apiKey: keyEl.value.trim() || (isEdit ? editing.apiKey : "")
+          };
+        }
 
         function showError(message, field) {
           errorEl.hidden = false;
@@ -2230,16 +2399,12 @@ Error generating stack: `+e.message+`
         });
 
         async function saveModel() {
-          var name = nameEl.value.trim();
-          var modelId = modelEl.value.trim();
-          var baseUrl = baseEl.value.trim();
-          var protocol = protocolEl.value;
-          var apiKey = keyEl.value.trim();
-          if (!name) {
-            showError("请填写模型显示名称。", nameEl);
-            nameEl.focus();
-            return;
-          }
+          var draft = draftProfile();
+          var name = draft.name;
+          var modelId = draft.modelId;
+          var baseUrl = draft.baseUrl;
+          var protocol = draft.protocol;
+          var apiKey = draft.apiKey;
           if (!/^[\p{L}\p{N} ._\-·]+$/u.test(name)) {
             showError("名称只支持文字、数字、空格、点、横线和下划线。", nameEl);
             nameEl.focus();
@@ -2259,7 +2424,7 @@ Error generating stack: `+e.message+`
             var parsed = new URL(baseUrl);
             if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error();
           } catch (e) {
-            showError("接口地址必须是有效的 http(s) URL。", baseEl);
+            showError("接口地址必须是有效的 http(s) URL；选择服务商模板可自动填好。", baseEl);
             baseEl.focus();
             return;
           }
@@ -2351,8 +2516,46 @@ Error generating stack: `+e.message+`
           }
         }
 
+        async function testDraft() {
+          var draft = draftProfile();
+          if (!draft.modelId) {
+            showError("请填写模型 ID。", modelEl);
+            modelEl.focus();
+            return;
+          }
+          if (!draft.baseUrl) {
+            showError("请选择服务商模板，或展开高级设置填写接口地址。", baseEl);
+            baseEl.focus();
+            return;
+          }
+          errorEl.hidden = true;
+          testNote.textContent = "正在测试 " + draft.name + "…";
+          testNote.style.color = "var(--ink3)";
+          testBtn.disabled = true;
+          testBtn.textContent = "测试中…";
+          var started = performance.now();
+          try {
+            var reply = await callModelProfile(
+              draft,
+              "You are a connectivity probe. Reply briefly.",
+              "Reply with OK.",
+              { allowShort: true, maxTokens: 32 }
+            );
+            testNote.textContent = "连接成功 · " + Math.round(performance.now() - started) + "ms" +
+              (reply ? " · " + reply.slice(0, 24) : "");
+            testNote.style.color = "var(--ok)";
+          } catch (err) {
+            testNote.textContent = "连接失败：" + ((err && err.message) || err);
+            testNote.style.color = "var(--err)";
+          } finally {
+            testBtn.disabled = false;
+            testBtn.textContent = "测试连接";
+          }
+        }
+
         el("btnCancelModel").addEventListener("click", closeModelDialog);
         el("btnSaveModel").addEventListener("click", saveModel);
+        testBtn.addEventListener("click", testDraft);
         [nameEl, modelEl, baseEl, keyEl].forEach(function (field) {
           field.addEventListener("keydown", function (event) {
             if (event.key === "Enter" && !event.isComposing) {
@@ -2361,7 +2564,7 @@ Error generating stack: `+e.message+`
             }
           });
         });
-        requestAnimationFrame(function () { nameEl.focus(); });
+        requestAnimationFrame(function () { modelEl.focus(); });
       }
     });
   }
