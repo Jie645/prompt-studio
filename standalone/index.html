@@ -432,6 +432,7 @@ Error generating stack: `+e.message+`
   var state = ST_IDLE;
   var sheetGen = 0, sheetOpenedAt = 0, sheetKind = "";
   var panelOpen = null;
+  var activeRounds = [];
 
   var SET = {
     detail: "标准",           // 精简 | 标准 | 详尽
@@ -1105,7 +1106,7 @@ Error generating stack: `+e.message+`
 
   function buildModelRequest(brief, ans, st, profile) {
     var lines = [];
-    ROUNDS.forEach(function (r, i) {
+    activeRounds.forEach(function (r, i) {
       var v = ansWithNote(ans, notes, i);
       if (v) lines.push("- " + r.label + "：" + v);
     });
@@ -1138,7 +1139,7 @@ Error generating stack: `+e.message+`
   /* 深度模式的第二轮：只做审稿与修订，不再改变需求范围 */
   function buildReviewRequest(brief, ans, st, draft) {
     var lines = [];
-    ROUNDS.forEach(function (r, i) {
+    activeRounds.forEach(function (r, i) {
       var v = ansWithNote(ans, notes, i);
       if (v) lines.push("- " + r.label + "：" + v);
     });
@@ -1474,6 +1475,7 @@ Error generating stack: `+e.message+`
     }
   ];
 
+  activeRounds = ROUNDS;
   var answers = [];   // 每轮选中的选项（多选用「、」连接）
   var notes = [];     // 每轮额外写的补充说明，不混进选项值里
   /* 答案一律存字符串：多选用「、」连接，读写都不用关心类型 */
@@ -1482,7 +1484,7 @@ Error generating stack: `+e.message+`
     return Array.isArray(v) ? v.filter(function (x) { return x && String(x).trim(); }).join("、") : String(v).trim();
   }
   function ansIndexOf(id) {
-    for (var i = 0; i < ROUNDS.length; i++) if (ROUNDS[i].id === id) return i;
+    for (var i = 0; i < activeRounds.length; i++) if (activeRounds[i].id === id) return i;
     return -1;
   }
   function ansOf(list, id) {
@@ -1964,7 +1966,7 @@ Error generating stack: `+e.message+`
     }
     if (kind === "flow") {
       return SET.flow === "先沟通再生成"
-        ? "先沟通再生成：发射后我先反问 " + ROUNDS.length + " 轮（可跳过、可回上一轮），把关键信息问清楚再落笔。"
+        ? "先沟通再生成：发射后模型会根据你的需求生成 4–6 个追问（可跳过、可回上一轮），把关键信息问清楚再落笔。"
         : "直接生成：不做反问，按你写的内容直接落笔，快但可能偏。";
     }
     if (kind === "timeout") {
@@ -2579,7 +2581,7 @@ Error generating stack: `+e.message+`
 
   function askedCount() {
     var n = 0;
-    for (var i = 0; i < ROUNDS.length; i++) {
+    for (var i = 0; i < activeRounds.length; i++) {
       if (ansText(answers[i]) || ansText(notes[i])) n++;
     }
     return n;
@@ -2594,7 +2596,7 @@ Error generating stack: `+e.message+`
 
   function askBody(r) {
     var h = '<div class="qProg" aria-hidden="true">';
-    ROUNDS.forEach(function (_, i) {
+    activeRounds.forEach(function (_, i) {
       h += '<i class="' + (i < roundIdx ? "done" : i === roundIdx ? "on" : "") + '"></i>';
     });
     h += "</div>";
@@ -2610,7 +2612,7 @@ Error generating stack: `+e.message+`
     h += "</div>";
     h += '<p class="qHint" id="qHint">' +
          (r.multi ? "可多选：点几下选中几项" : "选一项，或在下面直接写") + "</p>";
-    var rest = ROUNDS.length - roundIdx - 1;
+    var rest = activeRounds.length - roundIdx - 1;
     if (rest > 0) {
       h += '<button class="skipRest" type="button" id="btnSkipRest">' +
            "跳过剩余 " + rest + " 轮，直接生成</button>";
@@ -2624,7 +2626,7 @@ Error generating stack: `+e.message+`
   }
 
   function askFoot() {
-    var last = roundIdx === ROUNDS.length - 1;
+    var last = roundIdx === activeRounds.length - 1;
     return '<button class="btn ghost" id="btnBack" type="button"' +
              (roundIdx === 0 ? " disabled" : "") + '>上一轮</button>' +
            '<button class="btn ghost" id="btnSkip" type="button">这轮跳过</button>' +
@@ -2633,13 +2635,13 @@ Error generating stack: `+e.message+`
   }
 
   function askMeta() {
-    return "共 " + ROUNDS.length + " 轮 · 已填 " + askedCount() + " 项";
+    return "共 " + activeRounds.length + " 轮 · 已填 " + askedCount() + " 项";
   }
 
   function updateAskHint() {
     var hint = el("qHint");
     if (!hint) return;
-    var r = ROUNDS[roundIdx];
+    var r = activeRounds[roundIdx];
     if (!r.multi) {
       hint.textContent = picked.values.length
         ? "已选：" + picked.values[0]
@@ -2652,7 +2654,7 @@ Error generating stack: `+e.message+`
   }
 
   function bindAsk() {
-    var r = ROUNDS[roundIdx];
+    var r = activeRounds[roundIdx];
     var grid = el("optGrid");
     var free = el("freeAns");
     picked = { values: [] };
@@ -2704,10 +2706,10 @@ Error generating stack: `+e.message+`
     var skipRest = el("btnSkipRest");
     if (skipRest) {
       skipRest.addEventListener("click", function () {
-        for (var i = roundIdx; i < ROUNDS.length; i++) {
+        for (var i = roundIdx; i < activeRounds.length; i++) {
           if (answers[i] === undefined) answers[i] = "";
         }
-        roundIdx = ROUNDS.length;
+        roundIdx = activeRounds.length;
         closeSheet(function () { startGenerating(); });
       });
     }
@@ -2717,13 +2719,125 @@ Error generating stack: `+e.message+`
     live.textContent = "第 " + (roundIdx + 1) + " 轮沟通：" + r.q;
   }
 
+  function buildClarifyRequest(brief) {
+    return {
+      system:
+        "你是一名需求澄清访谈官。根据用户的具体需求，找出会影响最终交付的关键缺口。" +
+        "只输出 JSON 数组，不要 Markdown 代码围栏、不要解释。每个对象必须包含：" +
+        "id、label、q、sub、why、multi、opts。opts 是 2–5 个对象，每项包含 v 和 d；" +
+        "问题要针对当前任务，不要套用固定问卷，不要重复用户已经说过的信息。",
+      user:
+        "用户需求：\n" + brief +
+        "\n\n请生成 4–6 个最关键的追问，用于分轮澄清。\n" +
+        "要求：\n" +
+        "- 第一个问题先确认交付对象或最终用途；\n" +
+        "- 后续问题围绕该任务真正会改变结果的缺口；\n" +
+        "- 每个问题给出 2–5 个具体、可点击的选项；\n" +
+        "- 需要多个答案时 multi=true；\n" +
+        "- 不要问用户已经明确回答过的内容。\n" +
+        "返回格式示例（只返回数组）：\n" +
+        '[{"id":"q1","label":"交付对象","q":"这份内容最终给谁看？","sub":"不同读者决定措辞和详略。","why":"影响表达深度。","multi":false,"opts":[{"v":"工程师","d":"需要实现细节"},{"v":"客户","d":"需要结论和行动"}]}]'
+    };
+  }
+
+  function parseClarifyQuestions(text) {
+    var raw = cleanModelOutput(text)
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    var start = raw.indexOf("[");
+    var end = raw.lastIndexOf("]");
+    if (start < 0) throw new Error("模型没有返回追问数组");
+    var body = end > start ? raw.slice(start, end + 1) : raw.slice(start);
+    var list;
+    try {
+      list = JSON.parse(body);
+    } catch (parseError) {
+      /* 模型可能在 max_tokens 处截断；保留最后一个完整的顶层问题对象后补 ]。 */
+      var repaired = "";
+      for (var cut = body.length - 1; cut > 0; cut--) {
+        if (body.slice(cut, cut + 4) !== "\n  }") continue;
+        var candidate = body.slice(0, cut + 3).replace(/,\s*$/, "") + "\n]";
+        try {
+          repaired = JSON.parse(candidate);
+          break;
+        } catch (e) {}
+      }
+      if (!repaired) throw parseError;
+      list = repaired;
+    }
+    if (!Array.isArray(list)) throw new Error("追问格式不是数组");
+    var out = list.slice(0, 6).map(function (item, index) {
+      var q = String(item.q || item.question || "").trim();
+      if (!q) return null;
+      var opts = (item.opts || item.options || []).slice(0, 5).map(function (opt) {
+        if (typeof opt === "string") return { v: opt, d: "" };
+        return { v: String(opt.v || opt.value || "").trim(), d: String(opt.d || opt.description || "").trim() };
+      }).filter(function (opt) { return !!opt.v; });
+      return {
+        id: String(item.id || ("dyn-" + (index + 1))),
+        label: String(item.label || ("补充 " + (index + 1))).trim(),
+        q: q,
+        sub: String(item.sub || item.why || "回答这一项会直接影响最终交付。").trim(),
+        why: String(item.why || "").trim(),
+        multi: !!item.multi,
+        opts: opts
+      };
+    }).filter(Boolean);
+    if (out.length < 2) throw new Error("模型返回的有效追问太少");
+    return out;
+  }
+
+  function beginClarification() {
+    var profile = selectedProfile();
+    activeRounds = ROUNDS;
+    answers = [];
+    notes = [];
+    roundIdx = 0;
+    if (profile.source === "offline") {
+      openAsk();
+      return;
+    }
+
+    state = ST_IDLE;
+    openSheet({
+      kind: "clarify",
+      title: "正在生成追问",
+      meta: "模型正在阅读你的需求",
+      body:
+        '<p class="qTitle">先根据你的需求问清楚</p>' +
+        '<p class="qSub">模型正在识别任务类型、关键缺口和会影响交付的决策点。</p>' +
+        '<div class="bar"><i style="transform:scaleX(.72)"></i></div>',
+      foot: ""
+    });
+    var req = buildClarifyRequest(lastBrief);
+    callModelProfile(profile, req.system, req.user, { allowShort: true, maxTokens: 1600 })
+      .then(function (text) {
+        activeRounds = parseClarifyQuestions(text);
+        roundIdx = 0;
+        answers = [];
+        notes = [];
+        live.textContent = "已根据需求生成 " + activeRounds.length + " 轮追问";
+        openAsk();
+        toast("已根据你的需求生成 " + activeRounds.length + " 轮追问", "ok");
+      })
+      .catch(function (err) {
+        activeRounds = ROUNDS;
+        roundIdx = 0;
+        answers = [];
+        notes = [];
+        openAsk();
+        toast("模型追问失败，已改用内置问题：" + ((err && err.message) || err), "warn");
+      });
+  }
+
   function openAsk() {
     state = ST_ASK;
     openSheet({
       result: false,
       title: "沟通补充 · 第 " + (roundIdx + 1) + " 轮",
       meta: askMeta(),
-      body: askBody(ROUNDS[roundIdx]),
+      body: askBody(activeRounds[roundIdx]),
       foot: askFoot(),
       after: bindAsk
     });
@@ -2735,7 +2849,7 @@ Error generating stack: `+e.message+`
     roundIdx--;
     sheetTitle.textContent = "沟通补充 · 第 " + (roundIdx + 1) + " 轮";
     sheetMeta.textContent = askMeta();
-    sheetBody.innerHTML = askBody(ROUNDS[roundIdx]);
+    sheetBody.innerHTML = askBody(activeRounds[roundIdx]);
     sheetFoot.innerHTML = askFoot();
     bindAsk();
     sheetBody.scrollTop = 0;
@@ -2744,7 +2858,7 @@ Error generating stack: `+e.message+`
   function submitRound(submit) {
     var free = el("freeAns");
     var extra = free ? free.value.trim() : "";
-    var r = ROUNDS[roundIdx];
+    var r = activeRounds[roundIdx];
     if (submit && !extra && !picked.values.length) {
       var grid = el("optGrid");
       if (grid) {
@@ -2760,7 +2874,7 @@ Error generating stack: `+e.message+`
     notes[roundIdx] = submit && vals.length ? extra : "";
     closeSheet(function () {
       roundIdx++;
-      if (roundIdx < ROUNDS.length) { openAsk(); return; }
+      if (roundIdx < activeRounds.length) { openAsk(); return; }
       startGenerating();
     });
   }
@@ -3069,7 +3183,10 @@ Error generating stack: `+e.message+`
     ];
     return specs.map(function (spec) {
       var ans2 = ans.slice();
-      ans2[1] = spec.grain;
+      var grainIdx = activeRounds.findIndex(function (r) {
+        return r.id === "grain" || /颗粒|详细|篇幅/.test((r.label || "") + (r.q || ""));
+      });
+      if (grainIdx >= 0) ans2[grainIdx] = spec.grain;
       var vset = variantSet(st, st.model, spec.detail, spec.deep);
       var prompt = composePrompt(brief, ans2, vset);
       return { label: spec.label, model: st.model, prompt: prompt, score: scorePrompt(prompt).total };
@@ -3199,7 +3316,7 @@ Error generating stack: `+e.message+`
     var chips = "";
     if (!fromHistory) {
       var chipHTML = "";
-      ROUNDS.forEach(function (r, i) {
+      activeRounds.forEach(function (r, i) {
         var v = ansWithNote(answers, notes, i);
         if (!v) return;
         chipHTML += '<span class="ansChip" title="' + esc(v) + '"><b>' + esc(r.label) + '</b>' +
@@ -3214,7 +3331,7 @@ Error generating stack: `+e.message+`
         speed +
       "</div>" +
       '<p class="resSub">' + steps +
-        (fromHistory ? "" : " · " + esc(engineLabel) + " · 采纳 " + answered + " / " + ROUNDS.length + " 轮补充") + "</p>" +
+        (fromHistory ? "" : " · " + esc(engineLabel) + " · 采纳 " + answered + " / " + activeRounds.length + " 轮补充") + "</p>" +
       warning +
       chips +
       '<div class="bar"><i id="resBar"></i></div>' +
@@ -3698,13 +3815,18 @@ Error generating stack: `+e.message+`
       bullet("使用对象：" + who + "（" + whoDef.tone + "）");
       if (form) bullet("产物形态：" + form + (FORM_HINT[form] ? "——" + FORM_HINT[form] : ""));
       if (material) bullet("现有材料：" + material + (MAT_HINT[material] ? "——" + MAT_HINT[material] : ""));
-      /* 用户额外写的补充：单独成一条，不跟选项混在一句话里 */
-      var freeNotes = ROUNDS.map(function (r, i) {
-        var v = ansText(notes[i]);
-        return v ? r.label + "：" + v : "";
-      }).filter(function (x) { return x; });
-      if (freeNotes.length) bullet("补充说明：" + freeNotes.join("；"));
       bullet("缺少会改变核心结论的信息时，最多列出 3 个必须确认的问题；其余信息缺失时写明假设并继续，不要编造事实。");
+      L.push("");
+    }
+
+    /* 动态追问的问答全部进入提示词，不再只保留固定六问的语义字段 */
+    var clarify = activeRounds !== ROUNDS ? activeRounds.map(function (r, i) {
+      var v = ansWithNote(ans, notes, i);
+      return v ? (r.q || r.label) + " → " + v : "";
+    }).filter(function (x) { return x; }) : [];
+    if (clarify.length) {
+      sec("沟通补充");
+      clarify.forEach(function (x) { bullet(x); });
       L.push("");
     }
 
@@ -3898,6 +4020,7 @@ Error generating stack: `+e.message+`
 
     busy = true;
     lastBrief = text;
+    activeRounds = ROUNDS;
     answers = [];
     notes = [];
     roundIdx = 0;
@@ -3980,7 +4103,7 @@ Error generating stack: `+e.message+`
       pool.chip.style.opacity = "0";
       busy = false;
       if (direct) startGenerating();
-      else { reclaim(); openAsk(); }
+      else { reclaim(); beginClarification(); }
     });
   }
 
@@ -3995,7 +4118,7 @@ Error generating stack: `+e.message+`
       reclaim();
       busy = false;
       if (SET.flow === "直接生成") startGenerating();
-      else openAsk();
+      else beginClarification();
     });
   }
 
@@ -4004,6 +4127,7 @@ Error generating stack: `+e.message+`
     orbitStop("abort");
     busy = false;
     state = ST_IDLE;
+    activeRounds = ROUNDS;
     answers = [];
     notes = [];
     roundIdx = 0;
