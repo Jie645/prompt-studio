@@ -1,4 +1,4 @@
-Prompt Studio Standalone 1.2.0
+Prompt Studio Standalone 1.3.0
 
 安装：
 1. 解压整个安装包。
@@ -15,5 +15,5 @@ Prompt Studio Standalone 1.2.0
 卸载：
 运行安装目录中的 uninstall.ps1。
 
-本版本为单文件网页，不依赖 Node.js。
+离线规则不依赖 Node.js；云端模型通过本地代理访问时需要 Node.js 18+。
 API Key 和设置仅保存在本机浏览器中。

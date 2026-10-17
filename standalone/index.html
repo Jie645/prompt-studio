@@ -1118,7 +1118,9 @@ Error generating stack: `+e.message+`
       system:
         "你是一名资深提示词工程师。把「原始需求 + 已确认的沟通记录」写成一份可以直接执行、能逐条验收的中文提示词。" +
         "只输出最终提示词正文（Markdown）。需求原文只用于理解，不要贴回正文；不要开场白、不要解释思考过程。" +
-        "如果需求与沟通记录冲突，以用户已确认的沟通记录为准，并用一句可执行的规则消解冲突。",
+        "如果需求与沟通记录冲突，以用户已确认的沟通记录为准，并用一句可执行的规则消解冲突。" +
+        "提示词必须包含：执行契约、输入、交付物、输出格式、执行步骤、约束、验收标准；" +
+        "执行契约要说明何时可以直接开工、何时最多问 3 个问题；输出格式要规定最终交付物、假设/待核实项和自检结果。",
       user:
         "原始需求：\n" + brief +
         "\n\n沟通记录（用户已确认，优先于你的默认假设）：\n" +
@@ -1128,7 +1130,8 @@ Error generating stack: `+e.message+`
         "\n- 篇幅上限：约 " + charBudget + " 字（超出会被截断，务必在该范围内写完）" +
         "\n- 深度模式：" + (st.deep ? "开启：先完成初稿，再自评并修订，只输出修订后的最终稿" : "关闭") +
         "\n- 必须包含的小节：" + (featureNames.length ? featureNames.join("、") : "按需求自动补齐") +
-        "\n\n硬性要求：结构用 # 小节；约束写成可判定的句子；不要输出「以下是」这类空话。"
+        "\n\n硬性要求：结构用 # 小节；约束写成可判定的句子；不要输出「以下是」这类空话；" +
+        "不要把用户需求原文重复贴入正文，不要让 AI 只输出计划或建议。"
     };
   }
 
@@ -1153,6 +1156,7 @@ Error generating stack: `+e.message+`
         "3. 删除与任务无关的通用约束。\n" +
         "4. 验收标准必须能逐条判断；无法验证的表述改成可观察条件。\n" +
         "5. 不扩大或缩小用户已确认的需求范围。\n\n" +
+        "6. 必须保留执行契约和输出格式，确保拿到提示词的人可以直接开工。\n\n" +
         "请直接输出修订后的完整提示词。"
     };
   }
@@ -3677,6 +3681,13 @@ Error generating stack: `+e.message+`
       : "把「" + oneLine(brief) + "」这件事，做成一份可以直接执行、并且能逐条验收的交付物。");
     L.push("");
 
+    sec("执行契约");
+    bullet("本提示词已经包含执行所需上下文。除缺少会改变核心结论的信息外，不要再次询问，直接产出最终交付物。");
+    bullet("若必须确认，最多提出 3 个问题并暂停；若无需确认，不要只给提纲、计划或建议，必须给出可直接使用、发送或运行的成品。");
+    bullet("未提供的细节标注为 `[假设]`；事实、数据、引用无法核实时标注 `[待核实]`，不要编造。");
+    bullet("所有输出都必须满足验收标准；每条验收都要有可观察的证据。");
+    L.push("");
+
     if (lean) {
       sec("需求与对象");
       bullet("使用对象：" + who);
@@ -3693,7 +3704,7 @@ Error generating stack: `+e.message+`
         return v ? r.label + "：" + v : "";
       }).filter(function (x) { return x; });
       if (freeNotes.length) bullet("补充说明：" + freeNotes.join("；"));
-      bullet("信息不足时，最多列出 3 个必须确认的问题，不要自行编造前提。");
+      bullet("缺少会改变核心结论的信息时，最多列出 3 个必须确认的问题；其余信息缺失时写明假设并继续，不要编造事实。");
       L.push("");
     }
 
@@ -3705,6 +3716,50 @@ Error generating stack: `+e.message+`
     if (form === "工作流的一步") bullet("写死输入字段与输出格式，失败时返回什么也要写明。");
     if (st.detail === "精简") bullet("篇幅优先：任何一段如果删掉不影响执行，就删掉。");
     if (st.detail === "详尽") bullet("完整性优先：宁可长，也不要省略边界情况。");
+    if (dom.key === "product") {
+      bullet("完整性优先于字数控制：用户画像、核心流程、功能优先级、验收标准不能为了压缩篇幅而省略。");
+    }
+    if (dom.key === "frontend" || dom.key === "backend") {
+      bullet("完整性优先于字数控制：不要用省略号代替关键代码、字段、错误分支或运行命令。");
+    }
+    L.push("");
+
+    var coverage = [];
+    if (/PRD|产品需求|需求文档/i.test(brief)) coverage.push("PRD 完整章节");
+    if (/用户画像|persona|用户角色/i.test(brief)) coverage.push("用户画像");
+    if (/核心流程|主流程|用户流程|工作流/i.test(brief)) coverage.push("核心流程");
+    if (/优先级|排序|优先做/i.test(brief)) coverage.push("功能优先级");
+    if (/验收标准|验收条件|acceptance/i.test(brief)) coverage.push("验收标准");
+    if (/竞品|对标|对比/i.test(brief)) coverage.push("竞品/对标");
+    if (/数据来源|口径|指标/i.test(brief)) coverage.push("数据口径与来源");
+    if (/代码|接口|组件|页面|函数/i.test(brief)) coverage.push("可运行实现与文件结构");
+    if (/测试|用例|回归/i.test(brief)) coverage.push("测试与回归步骤");
+    if (coverage.length) {
+      sec("必须覆盖");
+      bullet(coverage.join("；") + "。缺一项视为未完成，不得用概述代替。");
+      L.push("");
+    }
+
+    sec("输出格式");
+    L.push("按以下顺序输出 Markdown，不要只给框架或建议：");
+    L.push("1. **最终交付物**：完整、可直接使用的内容。");
+    L.push("2. **假设与待确认**：最多 5 条，逐条标注 `[假设]` 或 `[待核实]`。");
+    L.push("3. **验收自检**：逐条勾选验收标准，并写出可观察的证据。");
+    if (dom.key === "frontend") {
+      bullet("代码任务必须给出文件树、关键代码、运行命令和测试命令；不要让执行方猜框架或目录。");
+      bullet("每个交互都要写出正常、加载、空、错误、禁用五种状态及恢复条件。");
+    } else if (dom.key === "product") {
+      bullet("按「一句话结论 → 用户画像 → 核心流程 → 功能优先级 → 验收标准 → 风险与依赖」组织正文。");
+      bullet("每个功能至少给出触发条件、主路径、异常路径和验收条件；明确不做什么。");
+    } else if (dom.key === "backend") {
+      bullet("给出接口契约、数据模型、错误码、幂等/重试策略和可复现的测试命令。");
+    } else if (dom.key === "data") {
+      bullet("给出指标口径、取数 SQL/步骤、结论、置信度和不确定性；没有数据时不要编造数字。");
+    } else if (dom.key === "service") {
+      bullet("按「分类 → 判定规则 → 标准话术 → 升级条件 → 质检点」输出，话术要可直接发送。");
+    } else if (dom.key === "ops" || dom.key === "writing") {
+      bullet("直接给成稿，不要写“你可以这样写”；需要复用处用 `{变量名}` 标出。");
+    }
     L.push("");
 
     sec("执行步骤");
@@ -3792,10 +3847,13 @@ Error generating stack: `+e.message+`
     var hasInput = has(/^#\s*输入/m);
     var hasGoal = has(/^#\s*目标/m);
     var hasDeliver = has(/^#\s*交付物/m);
+    var hasContract = has(/^#\s*执行契约/m);
+    var hasFormat = has(/^#\s*输出格式/m);
 
     var structure = Math.min(25, Math.round(
       4 * (hasGoal ? 1 : 0) + 4 * (hasDeliver ? 1 : 0) + 3 * (hasInput ? 1 : 0) +
-      3 * (hasSteps ? 1 : 0) + Math.min(11, secs * 1.4)));
+      3 * (hasSteps ? 1 : 0) + (hasContract ? 2 : 0) + (hasFormat ? 2 : 0) +
+      Math.min(9, secs * 1.2)));
 
     var bound = Math.min(25, Math.round(
       9 + bullets * 1.05 + (has(/^#\s*(禁区|边界)/m) ? 4 : 0)));
@@ -3804,19 +3862,22 @@ Error generating stack: `+e.message+`
 
     var exec = Math.min(25, Math.round(
       (hasSteps ? 6 : 0) + (hasExample ? 5 : 0) + (hasInput ? 4 : 0) +
+      (hasContract ? 4 : 0) + (hasFormat ? 3 : 0) +
       (t.length >= 420 ? 6 : 3) + (has(/必须|禁止|不得|写死|逐条/) ? 4 : 0)));
 
     var total = Math.max(40, Math.min(98, structure + bound + accept + exec));
     var dims = [
-      { k: "结构", v: structure, max: 25, note: secs + " 个章节" + (hasGoal && hasDeliver ? "，目标与交付物齐全" : "，缺少目标或交付物") },
+      { k: "结构", v: structure, max: 25, note: secs + " 个章节" + (hasGoal && hasDeliver ? "，目标与交付物齐全" : "，缺少目标或交付物") + (hasContract && hasFormat ? "，含执行契约" : "") },
       { k: "约束", v: bound, max: 25, note: bullets + " 条可执行约束" + (has(/^#\s*(禁区|边界)/m) ? "，含禁区" : "") },
       { k: "验收", v: accept, max: 25, note: checks ? checks + " 条可勾选标准" : "还没有可勾选的验收项" },
-      { k: "可执行", v: exec, max: 25, note: (hasSteps ? "有执行步骤" : "缺执行步骤") + (hasExample ? "，带示例" : "") + "，" + t.length + " 字" }
+      { k: "可执行", v: exec, max: 25, note: (hasSteps ? "有执行步骤" : "缺执行步骤") + (hasContract ? "，可直接开工" : "") + (hasExample ? "，带示例" : "") + "，" + t.length + " 字" }
     ];
 
     var advice = [];
     if (checks < 3) advice.push("验收项太少，补成可逐条打勾的清单，执行方才能自己判断做没做对。");
     if (!hasExample) advice.push("补一段「输入 → 输出」示例，能显著减少理解偏差。");
+    if (!hasContract) advice.push("补「执行契约」：说明什么时候直接开工、什么时候最多问 3 个问题。");
+    if (!hasFormat) advice.push("补「输出格式」：明确最终交付物、假设/待核实项和自检结果。");
     if (bullets < 8) advice.push("约束偏少，把「别做什么」也写下来，比只写「要做什么」更管用。");
     if (t.length < 420) advice.push("篇幅偏短，关键参数（字段、阈值、边界）可能还没写死。");
     if (!advice.length) advice.push("结构与约束已经完整，建议补一条「失败时怎么办」的处理约定。");
