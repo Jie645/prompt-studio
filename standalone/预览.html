@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>轨道算术 · 修订版预览</title>
+<style>
+  :root{--bg:#070b12;--card:#111a2a;--line:#8fb1ff24;--ink:#eef3fb;--muted:#98a4b8;--cy:#61deed;--ok:#54e2b3}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(circle at 55% 12%,#26365b55,transparent 40%),var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  main{max-width:1120px;margin:0 auto;padding:44px 22px 64px}
+  .kicker{color:var(--cy);letter-spacing:.16em;font-size:12px;margin:0 0 10px}
+  h1{font-size:32px;line-height:1.25;margin:0 0 10px;letter-spacing:-.02em}
+  .sub{color:var(--muted);margin:0 0 26px}
+  .status{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 30px}
+  .status span{border:1px solid var(--line);background:#152138;border-radius:999px;padding:6px 12px;color:#bfcbe0;font-size:12px}
+  .status strong{color:var(--ok)}
+  .grid{display:grid;grid-template-columns:1.35fr .65fr;gap:18px;align-items:start}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 20px 60px -35px #000}
+  .card h2{font-size:14px;margin:2px 2px 10px;color:#c8d7f3;font-weight:600}
+  .card img{display:block;width:100%;border-radius:11px;border:1px solid #bdd0ff1f}
+  .muted{color:var(--muted);font-size:12.5px;margin:9px 2px 0}
+  .checks{display:grid;gap:9px;margin:0;padding:0;list-style:none}
+  .checks li{border-top:1px solid var(--line);padding:9px 0 0;color:#c4d0e2;font-size:13px}
+  .checks li:first-child{border-top:0;padding-top:0}
+  .checks b{color:var(--cy);font-weight:600}
+  a{color:var(--cy)}
+  .actions{margin-top:24px;display:flex;flex-wrap:wrap;gap:10px}
+  .button{display:inline-flex;align-items:center;border:1px solid #61deed66;background:#61deed18;color:#dffcff;text-decoration:none;padding:9px 14px;border-radius:999px;font-size:13px}
+  @media(max-width:760px){main{padding:28px 14px 44px}h1{font-size:25px}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">PROMPT STUDIO · REVIEW FIXES</p>
+  <h1>轨道算术 · 修订版预览</h1>
+  <p class="sub">按《10 项问题复核》逐条整改后的本地页面预览。主文件已更新为桌面上的 <code>index.html</code>。</p>
+
+  <div class="status">
+    <span><strong>10 / 10</strong> 项报告问题已处理</span>
+    <span>深度模式：真实二轮</span>
+    <span>320px：无横向溢出</span>
+    <span>控制台：0 错误</span>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>生成结果 · Prompt 规则冲突已消除</h2>
+      <img src="preview/03-result.png" alt="修订版生成结果截图">
+      <p class="muted">3/3 步定稿；需求原文只保留一次，执行步骤不再要求“复述目标”。</p>
+    </section>
+    <section class="card">
+      <h2>本轮修复</h2>
+      <ul class="checks">
+        <li><b>深度模式</b>：模型模式真实执行“初稿 → 审阅 → 修订”。</li>
+        <li><b>320px</b>：导航不再遮挡功能面板，底部按钮自动换行。</li>
+        <li><b>可访问性</b>：分段控件补齐 <code>aria-pressed</code>，删除确认同步读屏标签。</li>
+        <li><b>模型状态</b>：多模型底部显示参与数量，失败文案区分“全部 / 部分”。</li>
+        <li><b>异常路径</b>：空模型表单、空追问、模型失败都有可见反馈。</li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="grid" style="margin-top:18px">
+    <section class="card">
+      <h2>桌面 · 待机工作台</h2>
+      <img src="preview/01-desktop.png" alt="桌面待机工作台">
+    </section>
+    <section class="card">
+      <h2>320px · 功能面板</h2>
+      <img src="preview/05-mobile-features-320.png" alt="320px 功能面板">
+      <p class="muted">面板顶部从固定导航下方开始；内容超出时在面板内部滚动。</p>
+    </section>
+  </div>
+
+  <div class="actions">
+    <a class="button" href="index.html">打开修订版页面</a>
+    <a class="button" href="修改说明书.md">查看修改说明书</a>
+  </div>
+</main>
+</body>
+</html>
