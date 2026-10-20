@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>轨道算术 · 提示词工作台</title>
+<!-- 1.5.2：CSP 兜底。单文件应用的内联脚本/样式必须放行，但把脚本来源、外链与 eval 收紧。 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; base-uri 'none'; object-src 'none'; frame-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self' https: http:; form-action 'none'" />
+<title>轨道算术 · 提示词工作台 v1.5.2</title>
 <meta name="description" content="把一句话需求问清楚，写成可直接执行、可逐条验收的提示词。支持角色路由、四维评分、历史留存与自带模型。" />
 <meta name="theme-color" content="#060910" />
 <meta name="color-scheme" content="dark" />
@@ -217,6 +219,45 @@ Error generating stack: `+e.message+`
 .seg button[aria-disabled="true"]{opacity:.62}
 .seg button[aria-disabled="true"]:hover{color:var(--ink3)}
 .optGrid.need .opt{border-color:#f0b64a8c;background:#f0b64a10}
+
+/* ---- 9. 提示词优化工作台 ---- */
+.optStudio{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.optCol{display:grid;gap:12px;min-width:0}
+.optCard{border:1px solid var(--line2);background:var(--slot);border-radius:var(--r14);padding:12px;min-width:0}
+.optCardHead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;color:var(--ink2);font-size:12px}
+.optCardHead b{color:var(--ink);font-size:13px;font-weight:600}
+.optCardHead span{color:var(--ink3);font-size:11px;text-align:right}
+.optEditor{width:100%;min-height:150px;max-height:260px;resize:vertical;border-radius:var(--r10);border:1px solid var(--line2);background:#03050b;color:var(--ink);padding:10px 11px;font:12.5px/1.65 var(--mono);outline:none}
+.optEditor:focus{border-color:#4dd8e88c;box-shadow:var(--ring)}
+.optEditor.small{min-height:66px;max-height:120px}
+.optRow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.optRow label{display:flex;align-items:center;gap:6px;color:var(--ink3);font-size:11.5px}
+.optSelect,.optInput{border:1px solid var(--line2);background:var(--slot);border-radius:var(--r999);color:var(--ink2);font:11.5px var(--sans);padding:6px 9px;outline:none}
+.optSelect{max-width:190px}
+.optInput{flex:1;min-width:140px;border-radius:var(--r10)}
+.optSelect:focus,.optInput:focus{border-color:#4dd8e88c;box-shadow:var(--ring)}
+.optActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.optActions .btn{height:32px;padding:0 14px;font-size:12px}
+.optStatus{min-height:17px;margin:8px 0 0;color:var(--ink3);font-size:11.5px;line-height:1.5}
+.optStatus.err{color:var(--err)}
+.optStatus.ok{color:var(--ok)}
+.optAnalysis{display:grid;gap:7px;max-height:220px;overflow:auto}
+.optIssue{border-left:2px solid var(--warn);padding:5px 8px;background:#f0b64a0d;border-radius:0 var(--r10) var(--r10) 0;font-size:11.5px;line-height:1.55}
+.optIssue b{color:var(--warn);font-weight:600}
+.optIssue p{margin:2px 0 0;color:var(--ink3)}
+.optCompareGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.optCompareGrid>div{min-width:0}
+.optCompareGrid b{display:block;color:var(--ink3);font-size:11px;margin-bottom:4px}
+.optOut{white-space:pre-wrap;word-break:break-word;background:#03050b;border:1px solid var(--line);border-radius:var(--r10);padding:8px;max-height:180px;overflow:auto;font:11.5px/1.55 var(--mono);color:var(--ink2);margin:0}
+.optEmpty{color:var(--ink3);font-size:11.5px;line-height:1.6}
+@media(max-width:820px){.optStudio{grid-template-columns:1fr}.optCompareGrid{grid-template-columns:1fr}}
+.brandVer{font-family:var(--mono);color:var(--ink3);font-size:10.5px;letter-spacing:.3px;border:1px solid var(--line2);border-radius:var(--r999);padding:1px 6px;white-space:nowrap}
+.status.warn{border-color:#f0b64a59;color:var(--warn)}
+.status.warn i{background:var(--warn);box-shadow:0 0 8px #f0b64aa6}
+@media(max-width:560px){.brandSub{display:none}.brandVer{display:none}.topActions{gap:6px}.modelAdd{padding:0 8px;font-size:11px}}
+.mCheck{display:flex;align-items:center;gap:7px;color:var(--ink3);font-size:11.5px;line-height:1.6;cursor:pointer}
+.mCheck input{width:14px;height:14px;flex:none;accent-color:#4dd8e8;margin:0}
+.segVal{color:var(--cy);font-weight:500}
 </style>
 <style id="pwOrbit">
 /* ===== 轨道：待机时什么都不画，生成时只剩一道进度弧 ===== */
@@ -282,6 +323,7 @@ Error generating stack: `+e.message+`
     </span>
     <span class="divv" aria-hidden="true"></span>
     <span class="brandSub">提示词工作台</span>
+    <span class="brandVer" id="brandVer" title="当前运行版本">v1.5.2</span>
   </div>
   <div class="topActions">
     <button class="modelAdd" id="addModel" type="button" aria-haspopup="dialog">
@@ -289,6 +331,9 @@ Error generating stack: `+e.message+`
         <path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
       <span>添加模型</span>
+    </button>
+    <button class="modelAdd" id="optimizeExisting" type="button" aria-haspopup="dialog" title="优化已有提示词">
+      <span>优化已有</span>
     </button>
     <div class="status off" id="statusPill" role="status"
          title="当前使用内置离线规则生成，不会上传你的输入">
@@ -390,6 +435,9 @@ Error generating stack: `+e.message+`
 (function () {
   "use strict";
 
+  var APP_VERSION = "1.5.2";
+  try { console.info("[轨道算术 · 提示词工作台] v" + APP_VERSION + " · " + location.href); } catch (e) {}
+
   var TAP_MS = 90, FLY_MS = 460, HIT_MS = 220, FADE_MS = 160, REDUCED_MS = 60, DT_MAX = 48;
   var TRAIL_LIFE = 380, TRAIL_EVERY = 24, TRAIL_TILL = 0.68;
   var N_GHOST = 3, N_DOT = 12, N_RING = 2, N_SPARK = 5;
@@ -414,6 +462,7 @@ Error generating stack: `+e.message+`
   var live = el("live");
   var topbar = document.querySelector(".topbar");
   var addModelBtn = el("addModel");
+  var optimizeExistingBtn = el("optimizeExisting");
   var histNum = el("histNum");
   /* 由安装包里的 server.mjs 在 8787 端口提供同源转发；直接打开 file:// 时为 false */
   var LOCAL_PROXY = location.protocol === "http:" &&
@@ -439,6 +488,7 @@ Error generating stack: `+e.message+`
     flow: "先沟通再生成",      // 直接生成 | 先沟通再生成
     deep: false,
     timeout: 60,             // 秒：模型响应上限，超时自动回退离线规则
+    budget: 4096,            // 单次输出 token 上限（可调，推理模型按需放大）
     model: "离线规则",
     profileKey: "offline",
     mode: "单模型",
@@ -457,6 +507,8 @@ Error generating stack: `+e.message+`
     if (["直接生成", "先沟通再生成"].indexOf(o.flow) >= 0) SET.flow = o.flow;
     if (typeof o.deep === "boolean") SET.deep = o.deep;
     if ([30, 60, 120].indexOf(Number(o.timeout)) >= 0) SET.timeout = Number(o.timeout);
+    if ([2048, 4096, 8192].indexOf(Number(o.budget)) >= 0) SET.budget = Number(o.budget);
+    if (["单模型", "多模型对比"].indexOf(o.mode) >= 0) SET.mode = o.mode;
     if (o.feats && typeof o.feats === "object") {
       Object.keys(o.feats).forEach(function (k) {
         if (o.feats[k] === true) SET.feats[k] = true;
@@ -467,7 +519,7 @@ Error generating stack: `+e.message+`
     try {
       localStorage.setItem("pw-settings", JSON.stringify({
         detail: SET.detail, flow: SET.flow, deep: SET.deep,
-        timeout: SET.timeout, feats: SET.feats
+        timeout: SET.timeout, budget: SET.budget, mode: SET.mode, feats: SET.feats
       }));
     } catch (e) {}
   }
@@ -491,6 +543,64 @@ Error generating stack: `+e.message+`
     protocol: "offline",
     apiKey: ""
   };
+  /* ---- 密钥存储（BUG-02）--------------------------------------------
+     密钥不再跟模型一起明文写进 localStorage：
+     · 默认只放 sessionStorage —— 标签页关闭即失效；
+     · 用户显式勾“记住密钥”才落 localStorage；
+     · 模型列表照旧存 localStorage，但字段里不再有 apiKey。 */
+  var SECRET_LS = "pw-model-secrets", SECRET_SS = "pw-model-secrets-s";
+  var secrets = readSecrets();
+
+  function readStore(store, name) {
+    try {
+      var obj = JSON.parse(store.getItem(name) || "{}");
+      return obj && typeof obj === "object" ? obj : {};
+    } catch (e) { return {}; }
+  }
+  function writeStore(store, name, obj) {
+    try { store.setItem(name, JSON.stringify(obj)); } catch (e) {}
+  }
+  function readSecrets() {
+    var out = {};
+    /* 持久级先读、会话级后读：同名以会话级为准 */
+    var sources = [readStore(localStorage, SECRET_LS), readStore(sessionStorage, SECRET_SS)];
+    sources.forEach(function (src) {
+      Object.keys(src).forEach(function (id) {
+        var v = src[id];
+        if (!v) return;
+        var key = cleanApiKey(typeof v === "string" ? v : (v.key || ""));
+        if (!key) return;
+        out[id] = { key: key, remember: typeof v === "object" ? !!v.remember : true };
+      });
+    });
+    return out;
+  }
+  function persistSecrets() {
+    var sess = {}, pers = {};
+    Object.keys(secrets).forEach(function (id) {
+      var rec = secrets[id];
+      if (!rec || !rec.key) return;
+      sess[id] = rec;
+      if (rec.remember) pers[id] = rec;
+    });
+    writeStore(sessionStorage, SECRET_SS, sess);
+    writeStore(localStorage, SECRET_LS, pers);   // 不留 remember 的密钥，持久区里就没有
+  }
+  function secretOf(id) { return (secrets[id] && secrets[id].key) || ""; }
+  function setSecret(id, key, remember) {
+    var clean = cleanApiKey(key || "");
+    if (!clean) return false;
+    secrets[id] = { key: clean, remember: !!remember };
+    persistSecrets();
+    return true;
+  }
+  function dropSecret(id) {
+    if (!secrets[id]) return false;
+    delete secrets[id];
+    persistSecrets();
+    return true;
+  }
+
   var customModels = loadCustomModels();
   var serverProfiles = [];
   var serverAvailable = false;
@@ -498,21 +608,41 @@ Error generating stack: `+e.message+`
   function loadCustomModels() {
     try {
       var list = JSON.parse(localStorage.getItem("pw-custom-models") || "[]");
-      return Array.isArray(list)
-        ? list.filter(function (m) { return m && m.name && m.modelId; }).map(function (m, i) {
-            var id = m.id || "local-" + i;
+      if (!Array.isArray(list)) return [];
+      var migrated = false;
+      var out = list.filter(function (m) { return m && m.name && m.modelId; }).map(function (m, i) {
+        var id = m.id || "local-" + i;
+        var legacy = cleanApiKey(m.apiKey || "");
+        /* 旧版本把密钥明文写在模型里：搬进密钥库，并标记为“记住”，避免升级后掉密钥 */
+        if (legacy && !secrets[id]) {
+          secrets[id] = { key: legacy, remember: true };
+          migrated = true;
+        }
+        return {
+          key: "local:" + id,
+          id: id,
+          source: "local",
+          name: m.name,
+          modelId: m.modelId,
+          baseUrl: m.baseUrl || "",
+          protocol: m.protocol || "openai",
+          apiKey: secretOf(id)
+        };
+      });
+      if (migrated) {
+        persistSecrets();
+        /* 迁移后立刻把模型列表重写成不含密钥的形态。这里不能调 saveCustomModels()：
+           此刻 customModels 还没赋值，会静默失败，明文密钥就留在 localStorage 里了。 */
+        try {
+          localStorage.setItem("pw-custom-models", JSON.stringify(out.map(function (m) {
             return {
-              key: "local:" + id,
-              id: id,
-              source: "local",
-              name: m.name,
-              modelId: m.modelId,
-              baseUrl: m.baseUrl || "",
-              protocol: m.protocol || "openai",
-              apiKey: m.apiKey || ""
+              id: m.id, name: m.name, modelId: m.modelId,
+              baseUrl: m.baseUrl, protocol: m.protocol, hasKey: !!m.apiKey
             };
-          })
-        : [];
+          })));
+        } catch (e) {}
+      }
+      return out;
     } catch (e) {
       return [];
     }
@@ -527,7 +657,7 @@ Error generating stack: `+e.message+`
           modelId: m.modelId,
           baseUrl: m.baseUrl,
           protocol: m.protocol,
-          apiKey: m.apiKey || ""
+          hasKey: !!m.apiKey
         };
       })));
     } catch (e) {}
@@ -646,11 +776,16 @@ Error generating stack: `+e.message+`
   }
 
   /* 真正能发起调用的模型：本地服务里的，或填了 Key 的本地模型 */
+  function profileReady(p) {
+    if (!p) return false;
+    if (p.source === "offline") return true;
+    if (p.source === "server") return true;
+    return !!p.apiKey || isLocalEndpoint(p.baseUrl);
+  }
   function usableProfiles() {
     return allModelProfiles().filter(function (p) {
       if (p.source === "offline") return false;
-      if (p.source === "server") return true;
-      return !!p.apiKey || isLocalEndpoint(p.baseUrl);
+      return profileReady(p);
     });
   }
 
@@ -675,11 +810,19 @@ Error generating stack: `+e.message+`
 
   function updateModeStatus() {
     var profile = selectedProfile();
+    statusPill.classList.remove("warn");
     if (profile.source === "offline") {
       statusPill.classList.add("off");
       statusPill.classList.remove("mode");
       statusPill.title = "当前使用内置离线规则生成，不会上传你的输入";
       statusTxt.textContent = "离线规则模式";
+    } else if (!profileReady(profile)) {
+      /* BUG-07：缺 Key 的模型不能继续冒充“模型生成” */
+      statusPill.classList.add("off");
+      statusPill.classList.add("warn");
+      statusPill.classList.remove("mode");
+      statusPill.title = "「" + profile.name + "」没有可用的 API Key，发射后会回退离线规则。到「功能 → 模型」里编辑，或点“清除全部密钥”后重填。";
+      statusTxt.textContent = "缺 API Key";
     } else {
       statusPill.classList.remove("off");
       statusPill.classList.add("mode");
@@ -692,27 +835,27 @@ Error generating stack: `+e.message+`
     custom: { name: "自定义接口", protocol: "openai", baseUrl: "", model: "" },
     openai: {
       name: "OpenAI", protocol: "openai",
-      baseUrl: "https://api.openai.com/v1", model: "gpt-4.1-mini"
+      baseUrl: "https://api.openai.com/v1", model: "gpt-6.1-sol"
     },
     deepseek: {
       name: "DeepSeek", protocol: "openai",
-      baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat"
+      baseUrl: "https://api.deepseek.com/v1", model: "deepseek-flash"
     },
     alibaba: {
       name: "阿里云百炼", protocol: "openai",
-      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus"
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen3.7-plus"
     },
     moonshot: {
       name: "月之暗面 Kimi", protocol: "openai",
-      baseUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k"
+      baseUrl: "https://api.moonshot.cn/v1", model: "kimi-k3"
     },
     zhipu: {
       name: "智谱 GLM", protocol: "openai",
-      baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash"
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-5.3"
     },
     anthropic: {
       name: "Anthropic", protocol: "anthropic",
-      baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5"
+      baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-6"
     },
     ollama: {
       name: "Ollama 本地", protocol: "openai",
@@ -748,20 +891,32 @@ Error generating stack: `+e.message+`
     return base + path;
   }
 
+  function cleanApiKey(raw) {
+    return String(raw || "")
+      .trim()
+      .replace(/^Bearer\s+/i, "")
+      .replace(/[\r\n\t]+/g, "");
+  }
+
   function isLocalEndpoint(baseUrl) {
     try {
-      var host = new URL(baseUrl).hostname;
-      return host === "localhost" || host === "127.0.0.1" || host === "::1";
+      var host = new URL(baseUrl).hostname.replace(/^\[|\]$/g, "");
+      if (host === "localhost" || host === "::1") return true;
+      if (/^127\./.test(host)) return true;
+      if (/^10\./.test(host)) return true;
+      if (/^192\.168\./.test(host)) return true;
+      if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+      if (/^169\.254\./.test(host)) return true;
+      return false;
     } catch (e) {
       return false;
     }
   }
 
   /* ================= 网络策略：慢模型也要能用 =================
-     分阶段看门狗：等连接 → 等首字 → 等下一段；任何一段卡住就立刻止损，
+     分阶段看门狗：等首字 → 等下一段；任何一段卡住就立刻止损，
      已经收到的内容不丢，直接当「截断稿」交付，用户可以马上拿去用。 */
   var NET = {
-    connect: 12000,    // 建立连接（拿到响应头）的上限
     first: 25000,      // 等第一个字的上限
     idle: 18000,       // 两个字之间允许的最大空档
     hardCap: 300000    // 绝对上限，兜底
@@ -772,19 +927,23 @@ Error generating stack: `+e.message+`
     return Math.min(Math.max(sec, 20), 300) * 1000;
   }
   /* 一次调用的体检数据：首字延迟 / 总耗时 / 收到多少字 / 是否被截断 */
-  var lastCall = { firstMs: 0, totalMs: 0, chars: 0, truncated: false, reason: "", streaming: false };
-  var activeCall = null;      // 正在进行的请求，可随时取消
+  function makeCallMeta() {
+    return { firstMs: 0, totalMs: 0, chars: 0, truncated: false, reason: "", streaming: false };
+  }
+  var lastCall = makeCallMeta();
+  var activeCalls = new Set();   // 并发模型请求：取消时要全部 abort
   var streamChars = 0, streamFirst = 0;
   var streamActive = false;   // 已经开始收到流式内容：动画阶段就不再抢标签
 
   function resetCallMeta() {
-    lastCall = { firstMs: 0, totalMs: 0, chars: 0, truncated: false, reason: "", streaming: false };
+    lastCall = makeCallMeta();
     streamChars = 0; streamFirst = 0; streamActive = false;
   }
   function abortActiveCall(reason) {
-    var call = activeCall;
-    activeCall = null;
-    if (call && call.abort) { try { call.abort(reason); } catch (e) {} }
+    activeCalls.forEach(function (call) {
+      try { if (call && call.abort) call.abort(reason); } catch (e) {}
+    });
+    activeCalls.clear();
   }
   /* 输出预算：写得越短越快，按详细程度给 token 上限，别让模型自由发挥到 4096 */
   function budgetOf(explicit) {
@@ -794,17 +953,43 @@ Error generating stack: `+e.message+`
     return base;
   }
 
+  function budgetForProfile(profile) {
+    var base = Number(SET.budget) || budgetOf();
+    /* 推理模型的 max_tokens 同时包含思考 token：给的额度不够，正文还没开始就被截断。
+       所以推理模型至少 8192，且用户选的上限直接生效（BUG-04）。 */
+    if (modelCaps(profile).reasoning) return Math.max(base, 8192);
+    return Math.max(256, Math.min(16384, base));
+  }
+
+  function modelCaps(profile) {
+    var kind = apiKind(profile);
+    var id = String(profile && profile.modelId || "").toLowerCase();
+    var openaiReasoning = (kind === "openai" || kind === "responses") &&
+      /^(o[1-9](?:-|$)|gpt-5|gpt-6)/.test(id);
+    var reasoning = openaiReasoning || /^(deepseek-(chat|reasoner|v4-pro|flash)|qwen3|glm-5)/.test(id);
+    var qwenThinking = kind === "openai" && /^qwen3/.test(id);
+    return {
+      kind: kind,
+      reasoning: reasoning,
+      tokenField: kind === "responses"
+        ? "max_output_tokens"
+        : openaiReasoning ? "max_completion_tokens" : "max_tokens",
+      temperature: openaiReasoning ? null : qwenThinking ? 0.6 : 0.4
+    };
+  }
+
   function modelHeaders(profile, stream) {
     var headers = {
       "content-type": "application/json",
       accept: stream ? "text/event-stream" : "application/json"
     };
-    if (profile.protocol === "anthropic") {
-      headers["x-api-key"] = profile.apiKey || "";
+    var key = cleanApiKey(profile.apiKey);
+    if (apiKind(profile) === "anthropic") {
+      headers["x-api-key"] = key;
       headers["anthropic-version"] = "2023-06-01";
       headers["anthropic-dangerous-direct-browser-access"] = "true";
-    } else if (profile.apiKey) {
-      headers.authorization = "Bearer " + profile.apiKey;
+    } else if (key) {
+      headers.authorization = "Bearer " + key;
     }
     return headers;
   }
@@ -812,37 +997,47 @@ Error generating stack: `+e.message+`
   function modelBody(profile, system, user, opts) {
     opts = opts || {};
     var stream = !!opts.stream;
-    var budget = Math.max(256, Math.min(4096, opts.maxTokens || 1600));
-    if (apiKind(profile) === "anthropic") {
-      return {
+    var budget = Math.max(256, Math.min(16384, opts.maxTokens || 1600));
+    var caps = modelCaps(profile);
+    var body;
+    if (caps.kind === "anthropic") {
+      body = {
         model: profile.modelId,
         system: system,
         messages: [{ role: "user", content: user }],
-        max_tokens: budget,
-        temperature: 0.4,
         stream: stream
       };
-    }
-    if (apiKind(profile) === "responses") {
-      return {
+    } else if (caps.kind === "responses") {
+      body = {
         model: profile.modelId,
         instructions: system,
         input: user,
-        max_output_tokens: budget,
-        temperature: 0.4,
+        stream: stream
+      };
+    } else {
+      body = {
+        model: profile.modelId,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ],
         stream: stream
       };
     }
-    return {
-      model: profile.modelId,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-      temperature: 0.4,
-      max_tokens: budget,
-      stream: stream
-    };
+    if (caps.temperature !== null) body.temperature = caps.temperature;
+    body[caps.tokenField] = budget;
+    return body;
+  }
+
+  function textOfContent(content) {
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content.map(function (part) {
+        if (typeof part === "string") return part;
+        return part && typeof part.text === "string" ? part.text : "";
+      }).join("");
+    }
+    return "";
   }
 
   /* 从流式事件里抠出这一小段增量：OpenAI 与 Anthropic 的字段不一样 */
@@ -859,9 +1054,28 @@ Error generating stack: `+e.message+`
     }
     var c = obj.choices && obj.choices[0];
     if (!c) return typeof obj.output_text === "string" ? obj.output_text : "";
-    if (c.delta && typeof c.delta.content === "string") return c.delta.content;
-    if (c.message && typeof c.message.content === "string") return c.message.content;
+    if (c.delta) return textOfContent(c.delta.content);
+    if (c.message) return textOfContent(c.message.content);
     return c.text || "";
+  }
+
+  function streamStopReason(profile, obj) {
+    if (!obj) return "";
+    if (apiKind(profile) === "anthropic") {
+      return obj.type === "message_delta" && obj.delta ? (obj.delta.stop_reason || "") : "";
+    }
+    if (apiKind(profile) === "responses") {
+      if (obj.type === "response.incomplete" && obj.response && obj.response.incomplete_details) {
+        return obj.response.incomplete_details.reason || "incomplete";
+      }
+      return "";
+    }
+    var c = obj.choices && obj.choices[0];
+    return c ? (c.finish_reason || "") : "";
+  }
+
+  function isTruncationReason(reason) {
+    return /^(length|max_tokens|max_output_tokens|incomplete)$/i.test(String(reason || ""));
   }
 
   function modelText(profile, json, raw) {
@@ -881,9 +1095,16 @@ Error generating stack: `+e.message+`
       return raw || "";
     }
     var choice = json && json.choices && json.choices[0];
-    if (choice) return (choice.message && choice.message.content) || choice.text || "";
+    if (choice) return (choice.message ? textOfContent(choice.message.content) : "") || choice.text || "";
     if (json && typeof json.output_text === "string") return json.output_text;
     return raw || "";
+  }
+
+  function modelReasoningText(profile, json) {
+    var choice = json && json.choices && json.choices[0];
+    return choice && choice.message && typeof choice.message.reasoning_content === "string"
+      ? choice.message.reasoning_content
+      : "";
   }
 
   async function readApiError(resp) {
@@ -894,12 +1115,17 @@ Error generating stack: `+e.message+`
       var json = JSON.parse(text);
       detail = (json.error && (json.error.message || json.error)) || json.message || text;
     } catch (e) {}
+    if (/^\s*</.test(String(detail))) {
+      detail = String(detail).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    }
     return String(detail || ("HTTP " + resp.status)).slice(0, 360);
   }
 
   async function callModelProfile(profile, system, user, opts) {
     opts = opts || {};
-    resetCallMeta();
+    if (!opts.meta) resetCallMeta();
+    var ownMeta = opts.meta || lastCall;
+    lastCall = ownMeta;
     var startedAt = performance.now();
 
     if (profile.source === "offline") throw new Error("当前是离线规则模式。");
@@ -907,7 +1133,8 @@ Error generating stack: `+e.message+`
     if (profile.source === "server") {
       var rctrl = new AbortController();
       var rtimer = window.setTimeout(function () { rctrl.abort(); }, timeoutMs());
-      activeCall = { abort: function (reason) { rctrl.abort(); } };
+      var rhandle = { abort: function (reason) { rctrl.abort(); } };
+      activeCalls.add(rhandle);
       try {
         var relay = await fetch("/api/relay/" + encodeURIComponent(profile.id), {
           method: "POST",
@@ -920,8 +1147,8 @@ Error generating stack: `+e.message+`
         var relayJson = null;
         try { relayJson = JSON.parse(relayText); } catch (e) {}
         var relayOut = modelText(profile, relayJson, relayText).trim();
-        lastCall.totalMs = Math.round(performance.now() - startedAt);
-        lastCall.chars = relayOut.length;
+        ownMeta.totalMs = Math.round(performance.now() - startedAt);
+        ownMeta.chars = relayOut.length;
         return relayOut;
       } catch (err) {
         if (err && err.name === "AbortError") {
@@ -930,7 +1157,7 @@ Error generating stack: `+e.message+`
         throw err;
       } finally {
         window.clearTimeout(rtimer);
-        activeCall = null;
+        activeCalls.delete(rhandle);
       }
     }
 
@@ -944,12 +1171,15 @@ Error generating stack: `+e.message+`
     var ctrl = new AbortController();
     var partial = "";
     var stopReason = "";
+    var finishReason = "";
+    var sawReasoning = false;
     var firstAt = 0;
     var idleTimer = 0, hardTimer = 0, firstTimer = 0;
 
-    activeCall = {
+    var callHandle = {
       abort: function (reason) { stopReason = reason || "已取消"; ctrl.abort(); }
     };
+    activeCalls.add(callHandle);
 
     function clearTimer(t) { if (t) window.clearTimeout(t); return 0; }
     function armIdle() {
@@ -966,11 +1196,13 @@ Error generating stack: `+e.message+`
         profile,
         kind === "anthropic" ? "/messages" : kind === "responses" ? "/responses" : "/chat/completions"
       );
+      /* 首字前不要用 18s 字间 idle；慢模型/非流式网关需要完整响应窗口。 */
+      var firstLimit = Math.max(15000, Math.min(capMs - 1000, 120000));
       firstTimer = window.setTimeout(function () {
         if (firstAt) return;
-        stopReason = "首字超时：" + Math.round(Math.min(NET.first, capMs) / 1000) + " 秒没等到第一个字";
+        stopReason = "首字超时：" + Math.round(firstLimit / 1000) + " 秒没等到第一个字";
         ctrl.abort();
-      }, Math.min(NET.first, capMs));
+      }, firstLimit);
       hardTimer = window.setTimeout(function () {
         if (stopReason) return;
         stopReason = "整轮超时：超过 " + Math.round(capMs / 1000) + " 秒";
@@ -985,12 +1217,54 @@ Error generating stack: `+e.message+`
       var resp;
       if (LOCAL_PROXY) {
         /* 本地启动器负责转发，规避浏览器对云端接口的 CORS 限制。 */
-        resp = await fetch("/api/proxy", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ url: endpoint, headers: reqHeaders, body: reqBody }),
-          signal: ctrl.signal
-        });
+        var proxyError = "";
+        try {
+          resp = await fetch("/api/proxy", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ url: endpoint, headers: reqHeaders, body: reqBody }),
+            signal: ctrl.signal
+          });
+          /* 404/405 通常不是代理；5xx 是代理上游失败。两种情况都留一次直连兜底，
+             但代理侧的原始报错要先读出来，别被后面的直连错误覆盖（BUG-06）。 */
+          if (resp.status === 404 || resp.status === 405 || resp.status >= 500) {
+            proxyError = "HTTP " + resp.status;
+            try {
+              var proxyDetail = await readApiError(resp);
+              if (proxyDetail) proxyError += " · " + proxyDetail;
+            } catch (e2) {}
+            resp = null;
+          }
+        } catch (e) {
+          if (e && e.name === "AbortError") throw e;
+          proxyError = (e && e.message) || String(e);
+          resp = null;
+        }
+        if (!resp) {
+          try {
+            resp = await fetch(endpoint, {
+              method: "POST",
+              headers: reqHeaders,
+              body: JSON.stringify(reqBody),
+              signal: ctrl.signal
+            });
+          } catch (e) {
+            if (e && e.name === "AbortError") throw e;
+            throw new Error(
+              "本地代理失败（" + (proxyError || "请求失败") + "），直连模型也失败（" +
+              ((e && e.message) || String(e)) + "）。请确认 8787 端口的 server.mjs 仍在运行；" +
+              "如果页面是旧标签，刷新后再试；直连失败也可能是浏览器 CORS 拦截。"
+            );
+          }
+          if (!resp.ok) {
+            var directDetail = "";
+            try { directDetail = await readApiError(resp); } catch (e3) {}
+            throw new Error(proxyError
+              ? "本地代理失败（" + proxyError + "）；直连模型返回 " + resp.status +
+                (directDetail ? " · " + directDetail : "")
+              : (directDetail || ("HTTP " + resp.status)));
+          }
+        }
       } else {
         resp = await fetch(endpoint, {
           method: "POST",
@@ -1011,15 +1285,34 @@ Error generating stack: `+e.message+`
         var raw = await resp.text();
         var json = null;
         try { json = JSON.parse(raw); } catch (e) {}
+        var finish = "";
+        if (json) {
+          if (apiKind(profile) === "anthropic") {
+            finish = json.stop_reason || "";
+          } else if (apiKind(profile) === "responses") {
+            finish = (json.incomplete_details && json.incomplete_details.reason) ||
+              (json.response && json.response.incomplete_details && json.response.incomplete_details.reason) || "";
+          } else {
+            finish = (json.choices && json.choices[0] && json.choices[0].finish_reason) || "";
+          }
+        }
         var text = modelText(profile, json, raw).trim();
-        if (!text) throw new Error("模型没有返回文本，可能被安全策略拦截。");
-        lastCall.totalMs = Math.round(performance.now() - startedAt);
-        lastCall.chars = text.length;
+        if (!text) {
+          var reasoning = modelReasoningText(profile, json);
+          throw new Error(reasoning
+            ? "模型只返回了推理内容，没有最终正文；请换用非推理模型或提高输出预算。"
+            : "模型没有返回文本，可能被安全策略拦截。");
+        }
+        ownMeta.totalMs = Math.round(performance.now() - startedAt);
+        ownMeta.chars = text.length;
+        if (isTruncationReason(finish)) {
+          ownMeta.truncated = true;
+          ownMeta.reason = "触达输出上限（" + finish + "）";
+        }
         return text;
       }
 
-      lastCall.streaming = true;
-      armIdle();
+      ownMeta.streaming = true;
       var reader = resp.body.getReader();
       var dec = new TextDecoder("utf-8");
       var buf = "";
@@ -1031,27 +1324,63 @@ Error generating stack: `+e.message+`
         buf = lines.pop();
         for (var li = 0; li < lines.length; li++) {
           var line = lines[li].trim();
-          if (!line || line.charAt(0) === ":" || line.indexOf("data:") !== 0) continue;
+          if (!line) continue;
+          if (line.charAt(0) === ":") {
+            /* SSE 心跳/注释：首字后算活动，避免长思考被 idle 误杀；首字前交给 firstLimit。 */
+            if (firstAt) armIdle();
+            continue;
+          }
+          if (line.indexOf("data:") !== 0) continue;
           var payload = line.slice(5).trim();
           if (!payload || payload === "[DONE]") continue;
           var obj = null;
           try { obj = JSON.parse(payload); } catch (e) { continue; }
+          if (obj.type === "response.failed") {
+            var responseError = obj.response && obj.response.error;
+            throw new Error((responseError && (responseError.message || responseError.code || responseError)) ||
+              "Responses 请求失败");
+          }
           if (obj.error || obj.type === "error") {
             throw new Error((obj.error && (obj.error.message || obj.error)) || "接口在流中途返回错误");
           }
+          var stop = streamStopReason(profile, obj);
+          if (stop) {
+            finishReason = stop;
+            if (isTruncationReason(stop)) {
+              ownMeta.truncated = true;
+              ownMeta.reason = "触达输出上限（" + stop + "）";
+            }
+          }
+          var choice = obj.choices && obj.choices[0];
+          var reasoningDelta = choice && choice.delta && typeof choice.delta.reasoning_content === "string"
+            ? choice.delta.reasoning_content : "";
+          if (reasoningDelta || (obj.type && /reasoning/.test(obj.type))) {
+            sawReasoning = true;
+            if (!firstAt) {
+              firstAt = performance.now();
+              ownMeta.firstMs = Math.round(firstAt - startedAt);
+              streamFirst = ownMeta.firstMs;
+              if (opts.onFirstToken) opts.onFirstToken(ownMeta.firstMs);
+            }
+            armIdle();
+            if (opts.onProgress) opts.onProgress(partial.length, ownMeta.firstMs);
+          }
           var delta = sseDelta(profile, obj);
-          if (!delta) continue;
+          if (!delta) {
+            if (firstAt) armIdle();
+            continue;
+          }
           if (!firstAt) {
             firstAt = performance.now();
-            lastCall.firstMs = Math.round(firstAt - startedAt);
-            streamFirst = lastCall.firstMs;
-            if (opts.onFirstToken) opts.onFirstToken(lastCall.firstMs);
+            ownMeta.firstMs = Math.round(firstAt - startedAt);
+            streamFirst = ownMeta.firstMs;
+            if (opts.onFirstToken) opts.onFirstToken(ownMeta.firstMs);
           }
           partial += delta;
           streamChars = partial.length;
-          lastCall.chars = partial.length;
+          ownMeta.chars = partial.length;
           armIdle();
-          if (opts.onProgress) opts.onProgress(partial.length, lastCall.firstMs);
+          if (opts.onProgress) opts.onProgress(partial.length, ownMeta.firstMs);
         }
       }
       /* 收尾：最后一行可能没有换行符 */
@@ -1059,15 +1388,41 @@ Error generating stack: `+e.message+`
       if (tailLine && tailLine.indexOf("data:") === 0) {
         var tailPayload = tailLine.slice(5).trim();
         if (tailPayload && tailPayload !== "[DONE]") {
-          try {
-            var tailDelta = sseDelta(profile, JSON.parse(tailPayload));
+          var tailObj = null;
+          try { tailObj = JSON.parse(tailPayload); } catch (e) {}
+          if (tailObj) {
+            if (tailObj.type === "response.failed") {
+              var tailError = tailObj.response && tailObj.response.error;
+              throw new Error((tailError && (tailError.message || tailError.code || tailError)) ||
+                "Responses 请求失败");
+            }
+            var tailStop = streamStopReason(profile, tailObj);
+            if (tailStop) {
+              finishReason = tailStop;
+              if (isTruncationReason(tailStop)) {
+                ownMeta.truncated = true;
+                ownMeta.reason = "触达输出上限（" + tailStop + "）";
+              }
+            }
+            var tailChoice = tailObj.choices && tailObj.choices[0];
+            if (tailChoice && tailChoice.delta && typeof tailChoice.delta.reasoning_content === "string") {
+              sawReasoning = true;
+            }
+            var tailDelta = sseDelta(profile, tailObj);
             if (tailDelta) partial += tailDelta;
-          } catch (e) {}
+          }
         }
       }
-      if (!partial.trim()) throw new Error("模型没有返回文本，可能被安全策略拦截。");
-      lastCall.totalMs = Math.round(performance.now() - startedAt);
-      lastCall.chars = partial.length;
+      if (!partial.trim()) {
+        throw new Error(sawReasoning
+          ? "模型只返回了推理内容，没有最终正文；请换用非推理模型或提高输出预算。"
+          : "模型没有返回文本，可能被安全策略拦截。");
+      }
+      ownMeta.totalMs = Math.round(performance.now() - startedAt);
+      ownMeta.chars = partial.length;
+      if (ownMeta.truncated) {
+        toast("模型输出触达上限，已保留收到的 " + partial.length + " 字", "warn");
+      }
       if (partial.length < 60 && !opts.allowShort) {
         throw new Error("模型只返回了 " + partial.length + " 个字符，内容不完整，已改用离线规则。");
       }
@@ -1075,12 +1430,12 @@ Error generating stack: `+e.message+`
     } catch (err) {
       var aborted = !!(err && (err.name === "AbortError" || ctrl.signal.aborted));
       var elapsed = Math.round(performance.now() - startedAt);
-      lastCall.totalMs = elapsed;
-      lastCall.chars = partial.length;
+      ownMeta.totalMs = elapsed;
+      ownMeta.chars = partial.length;
       /* 已经收到足够内容：不当失败，按「截断稿」交付 */
       if (partial.trim().length >= 180) {
-        lastCall.truncated = true;
-        lastCall.reason = stopReason || "流式响应提前结束";
+        ownMeta.truncated = true;
+        ownMeta.reason = stopReason || finishReason || "流式响应提前结束";
         toast("模型没能在限定时间内写完，已保留已收到的 " + partial.length + " 字", "warn");
         return partial.trim();
       }
@@ -1090,17 +1445,21 @@ Error generating stack: `+e.message+`
             ? "整轮超时：超过 " + Math.round(capMs / 1000) + " 秒没有写完"
             : "生成被中断"));
       }
-      if (err instanceof TypeError) {
-        throw new Error(LOCAL_PROXY
+      if (err instanceof TypeError && /Failed to fetch|NetworkError|Load failed/i.test(String(err.message || ""))) {
+        throw new Error((LOCAL_PROXY
           ? "模型接口请求失败：地址不可达、证书异常，或本地代理未启动。"
-          : "浏览器从本地文件直接请求云端接口会被 CORS 拦截。请关闭本页，使用桌面 Prompt Studio Standalone 快捷方式启动本地代理后再测试。");
+          : "浏览器从本地文件直接请求云端接口会被 CORS 拦截。请关闭本页，使用桌面 Prompt Studio Standalone 快捷方式启动本地代理后再测试。") +
+          " 原始错误：" + (err.message || String(err)));
+      }
+      if (err instanceof TypeError) {
+        throw new Error("请求参数或响应格式异常：" + (err.message || String(err)));
       }
       throw err;
     } finally {
       idleTimer = clearTimer(idleTimer);
       hardTimer = clearTimer(hardTimer);
       firstTimer = clearTimer(firstTimer);
-      activeCall = null;
+      activeCalls.delete(callHandle);
     }
   }
 
@@ -1114,11 +1473,11 @@ Error generating stack: `+e.message+`
     FEATURES.forEach(function (feature) {
       if (st.feats[feature.id]) featureNames.push(feature.name);
     });
-    var charBudget = Math.round(budgetOf() * 0.62);
+    var charBudget = Math.round(budgetForProfile(profile) * 0.62);
     return {
       system:
         "你是一名资深提示词工程师。把「原始需求 + 已确认的沟通记录」写成一份可以直接执行、能逐条验收的中文提示词。" +
-        "只输出最终提示词正文（Markdown）。需求原文只用于理解，不要贴回正文；不要开场白、不要解释思考过程。" +
+        "只输出最终提示词正文（Markdown）。需求原文只在「目标」中最多引用一次，不要整段贴回正文；不要开场白、不要解释思考过程。" +
         "如果需求与沟通记录冲突，以用户已确认的沟通记录为准，并用一句可执行的规则消解冲突。" +
         "提示词必须包含：执行契约、输入、交付物、输出格式、执行步骤、约束、验收标准；" +
         "执行契约要说明何时可以直接开工、何时最多问 3 个问题；输出格式要规定最终交付物、假设/待核实项和自检结果。",
@@ -1132,7 +1491,7 @@ Error generating stack: `+e.message+`
         "\n- 深度模式：" + (st.deep ? "开启：先完成初稿，再自评并修订，只输出修订后的最终稿" : "关闭") +
         "\n- 必须包含的小节：" + (featureNames.length ? featureNames.join("、") : "按需求自动补齐") +
         "\n\n硬性要求：结构用 # 小节；约束写成可判定的句子；不要输出「以下是」这类空话；" +
-        "不要把用户需求原文重复贴入正文，不要让 AI 只输出计划或建议。"
+        "不要整段重复用户需求原文；目标中最多引用一次，不要让 AI 只输出计划或建议。"
     };
   }
 
@@ -1146,14 +1505,14 @@ Error generating stack: `+e.message+`
     return {
       system:
         "你是一名严格的中文提示词审稿人。检查初稿是否忠于原始需求、是否内部矛盾、是否有不可执行的约束。" +
-        "只输出修订后的完整提示词 Markdown 正文，不要解释、不要复述需求、不要输出审稿过程。",
+        "只输出修订后的完整提示词 Markdown 正文，不要解释、不要输出审稿过程。",
       user:
         "原始需求：\n" + brief +
         "\n\n已确认信息：\n" + (lines.length ? lines.join("\n") : "- 无额外补充") +
         "\n\n初稿：\n<<<\n" + draft + "\n>>>\n\n" +
         "审稿规则：\n" +
         "1. 删除互相冲突的规则，例如同时要求「复述需求」和「不要复述需求」。\n" +
-        "2. 需求原文最多保留一次；没有新增信息的重复段落要删除。\n" +
+        "2. 需求原文只在「目标」一节最多保留一次；不要整段重复，没有新增信息的重复段落要删除。\n" +
         "3. 删除与任务无关的通用约束。\n" +
         "4. 验收标准必须能逐条判断；无法验证的表述改成可观察条件。\n" +
         "5. 不扩大或缩小用户已确认的需求范围。\n\n" +
@@ -1170,31 +1529,51 @@ Error generating stack: `+e.message+`
   }
 
   /* 深度模式：模型模式真实发起第二轮审阅；审阅失败时保留初稿，不把可用结果丢掉 */
-  function runDeepReview(profile, draft, token) {
+  function runDeepReview(profile, draft, token, firstMetaArg) {
     if (!SET.deep || profile.source === "offline" || !draft) {
-      return Promise.resolve({ text: draft, reviewed: false, reviewError: "" });
+      return Promise.resolve({
+        text: draft,
+        reviewed: false,
+        reviewError: "",
+        meta: firstMetaArg || lastCall
+      });
     }
     var request = buildReviewRequest(lastBrief, answers, SET, draft);
     var firstMeta = {
-      firstMs: lastCall.firstMs,
-      totalMs: lastCall.totalMs,
-      chars: lastCall.chars,
-      truncated: lastCall.truncated,
-      reason: lastCall.reason,
-      streaming: lastCall.streaming
+      firstMs: (firstMetaArg || lastCall).firstMs,
+      totalMs: (firstMetaArg || lastCall).totalMs,
+      chars: (firstMetaArg || lastCall).chars,
+      truncated: (firstMetaArg || lastCall).truncated,
+      reason: (firstMetaArg || lastCall).reason,
+      streaming: (firstMetaArg || lastCall).streaming
     };
     genLabel.innerHTML = "深度模式 · <b>正在审阅并修订初稿</b>";
-    return callModelProfile(profile, request.system, request.user, callOpts(token))
-      .then(function (text) {
-        var secondMeta = {
-          firstMs: lastCall.firstMs,
-          totalMs: lastCall.totalMs,
-          chars: lastCall.chars,
-          truncated: lastCall.truncated,
-          reason: lastCall.reason,
-          streaming: lastCall.streaming
-        };
-        lastCall = {
+    var secondOpts = callOpts(token, profile);
+    secondOpts.meta = makeCallMeta();
+    /* 推理模型偶尔把预算全烧在思考上，正文一个字都不给。换一条“只输出修订稿”的
+       极简指令重试一次；仍然失败才回落到初稿（BUG-04 的兜底）。 */
+    var retrySystem = "你是提示词编辑。只输出修订稿全文，不解释、不分析、不复述要求。";
+    var retryUser = "把下面这份提示词改得更可执行、可直接验收，保持原有结构与语言，" +
+      "只输出修订后的完整正文：\n<<<\n" + draft + "\n>>>";
+    function reviewOnce(system, user, opts) {
+      return callModelProfile(profile, system, user, opts).then(function (text) {
+        return { ok: true, text: cleanModelOutput(text), meta: opts.meta };
+      });
+    }
+    return reviewOnce(request.system, request.user, secondOpts)
+      .catch(function (err) {
+        var msg = (err && err.message) || String(err);
+        /* 只有“只返回推理 / 没返回文本 / 被截断”才值得重试，其余错误直接交付初稿 */
+        if (!/推理内容|没有返回文本|触达输出上限/.test(msg)) throw err;
+        genLabel.innerHTML = "深度模式 · <b>审阅只返回了推理，正在重试</b>";
+        var thirdOpts = callOpts(token, profile);
+        thirdOpts.meta = makeCallMeta();
+        return reviewOnce(retrySystem, retryUser, thirdOpts).catch(function () { throw err; });
+      })
+      .then(function (res) {
+        var text = res.text;
+        var secondMeta = res.meta || secondOpts.meta;
+        var combined = {
           firstMs: firstMeta.firstMs || secondMeta.firstMs,
           totalMs: (firstMeta.totalMs || 0) + (secondMeta.totalMs || 0),
           chars: text.length,
@@ -1202,16 +1581,511 @@ Error generating stack: `+e.message+`
           reason: secondMeta.reason,
           streaming: !!(firstMeta.streaming || secondMeta.streaming)
         };
-        return { text: cleanModelOutput(text), reviewed: true, reviewError: "" };
+        lastCall = combined;
+        return { text: cleanModelOutput(text), reviewed: true, reviewError: "", meta: combined };
       })
       .catch(function (err) {
         lastCall = firstMeta;
         return {
           text: draft,
           reviewed: false,
-          reviewError: (err && err.message) || String(err)
+          reviewError: (err && err.message) || String(err),
+          meta: firstMeta
         };
       });
+  }
+
+  /* ================= 提示词优化工作台 =================
+     参考成熟优化器的做法：先诊断，再结构化重写；结果可 A/B 测试、继续迭代、存历史。
+     离线模式也提供可用的规则版，不把功能锁死在模型 Key 上。 */
+  var optState = {
+    original: "",
+    result: "",
+    analysis: null,
+    mode: "system",
+    goal: "general",
+    test: "",
+    iterate: "",
+    comparison: null,
+    engine: "",
+    busy: false
+  };
+
+  function optGoalText(goal) {
+    return goal === "format"
+      ? "强化输出格式、字段、长度和失败处理"
+      : goal === "analysis"
+        ? "先诊断问题，再重写为可验收的结构化提示词"
+        : "重组角色、目标、约束、流程和验收标准";
+  }
+
+  function optModeText(mode) {
+    return mode === "user" ? "用户提示词" : "系统提示词";
+  }
+
+  function optStudioHTML() {
+    var modes = [
+      ["system", "系统提示词", "定义角色、行为和回应风格"],
+      ["user", "用户提示词", "定义任务、输入、要求和输出"]
+    ];
+    var goals = [
+      ["general", "通用结构化", "角色 / 目标 / 约束 / 流程 / 验收"],
+      ["format", "输出格式强化", "字段、顺序、长度、失败处理"],
+      ["analysis", "诊断式深度优化", "先找问题，再重写结构"]
+    ];
+    var modeOptions = modes.map(function (x) {
+      return '<option value="' + x[0] + '"' + (optState.mode === x[0] ? " selected" : "") + ">" + x[1] + "</option>";
+    }).join("");
+    var goalOptions = goals.map(function (x) {
+      return '<option value="' + x[0] + '"' + (optState.goal === x[0] ? " selected" : "") + ">" + x[1] + "</option>";
+    }).join("");
+    var analysisHidden = optState.analysis ? "" : " hidden";
+    var compareHidden = optState.comparison ? "" : " hidden";
+    return '<div class="optStudio">' +
+      '<div class="optCol">' +
+        '<div class="optCard">' +
+          '<div class="optCardHead"><b>原始提示词</b><span>粘贴已有 prompt，不执行它，只优化它</span></div>' +
+          '<textarea class="optEditor" id="optOriginal" placeholder="例如：你是一个客服，请回复用户的退款申请，语气好一点……">' + esc(optState.original) + "</textarea>" +
+          '<div class="optRow"><span class="optEmpty" id="optCount">' + optState.original.length + ' 字</span><span class="optEmpty">保留 {{变量}} 占位符</span></div>' +
+          '<div class="optRow">' +
+            '<label>模式 <select class="optSelect" id="optMode">' + modeOptions + "</select></label>" +
+            '<label>目标 <select class="optSelect" id="optGoal">' + goalOptions + "</select></label>" +
+          "</div>" +
+          '<div class="optRow"><label style="flex:1">测试内容 <input class="optInput" id="optTest" placeholder="可选：用一条真实输入做 A/B 对比" value="' + esc(optState.test) + '"></label></div>' +
+          '<div class="optActions">' +
+            '<button class="btn ghost" id="optAnalyze" type="button">先分析</button>' +
+            '<button class="btn primary" id="optRun" type="button">开始优化</button>' +
+          "</div>" +
+          '<p class="optStatus" id="optStatus" role="status">' + (optState.busy ? "处理中…" : "建议先分析，再优化；有模型时会走模型，没有模型时走离线结构规则。") + "</p>" +
+        "</div>" +
+        '<div class="optCard" id="optAnalysisCard"' + analysisHidden + ">" +
+          '<div class="optCardHead"><b>诊断</b><span>先找可验证的问题</span></div>' +
+          '<div class="optAnalysis" id="optAnalysis"></div>' +
+        "</div>" +
+      "</div>" +
+      '<div class="optCol">' +
+        '<div class="optCard">' +
+          '<div class="optCardHead"><b>优化结果</b><span id="optMeta">等待优化</span></div>' +
+          '<textarea class="optEditor" id="optResult" placeholder="优化后的提示词会显示在这里，可直接微调…">' + esc(optState.result) + "</textarea>" +
+          '<div class="optActions">' +
+            '<button class="btn ghost" id="optCopy" type="button" disabled>复制</button>' +
+            '<button class="btn ghost" id="optSave" type="button" disabled>存到最近</button>' +
+            '<button class="btn ghost" id="optCompare" type="button" disabled>A/B 测试</button>' +
+            '<button class="btn ghost" id="optUse" type="button" disabled>复制并使用</button>' +
+          "</div>" +
+        "</div>" +
+        '<div class="optCard">' +
+          '<div class="optCardHead"><b>继续迭代</b><span>在结果上改，不重新开始</span></div>' +
+          '<textarea class="optEditor small" id="optIterate" placeholder="例如：更严格地约束输出格式；删掉空话；保留所有变量">' + esc(optState.iterate) + "</textarea>" +
+          '<div class="optActions"><button class="btn ghost" id="optIterateBtn" type="button" disabled>按这条要求继续优化</button></div>' +
+        "</div>" +
+        '<div class="optCard" id="optCompareCard"' + compareHidden + ">" +
+          '<div class="optCardHead"><b>A/B 对比</b><span>同一测试内容，原始 vs 优化</span></div>' +
+          '<div class="optCompareGrid"><div><b>A · 原始</b><pre class="optOut" id="optOutA"></pre></div><div><b>B · 优化</b><pre class="optOut" id="optOutB"></pre></div></div>' +
+        "</div>" +
+      "</div>" +
+    "</div>";
+  }
+
+  function optSetStatus(message, kind) {
+    var node = el("optStatus");
+    if (!node) return;
+    node.textContent = message || "";
+    node.className = "optStatus" + (kind ? " " + kind : "");
+  }
+
+  function optUpdateButtons() {
+    var original = el("optOriginal");
+    var result = el("optResult");
+    if (!original || !result) return;
+    var hasOriginal = !!original.value.trim();
+    var hasResult = !!result.value.trim();
+    ["optAnalyze", "optRun"].forEach(function (id) {
+      var b = el(id);
+      if (b) b.disabled = !hasOriginal || optState.busy;
+    });
+    ["optCopy", "optSave", "optUse", "optIterateBtn", "optCompare"].forEach(function (id) {
+      var b = el(id);
+      if (b) b.disabled = !hasResult || optState.busy;
+    });
+    var count = el("optCount");
+    if (count) count.textContent = original.value.length + " 字";
+    var meta = el("optMeta");
+    if (meta) {
+      if (!hasResult) meta.textContent = "等待优化";
+      else {
+        var before = scorePrompt(original.value).total;
+        var after = scorePrompt(result.value).total;
+        meta.textContent = "结构分 " + before + " → " + after + " · " + result.value.length + " 字";
+      }
+    }
+  }
+
+  function localAnalyzePrompt(text, mode) {
+    var issues = [];
+    var strengths = [];
+    var t = String(text || "");
+    if (!/#\s+/.test(t)) {
+      issues.push({ severity: "P1", title: "缺少小节结构", detail: "模型无法快速区分角色、任务、约束和输出要求。", fix: "拆成角色、目标、输入、流程、输出格式、约束、验收标准。" });
+    } else strengths.push("已有小节结构");
+    if (!/(你是|作为|角色|role|身份)/i.test(t)) {
+      issues.push({ severity: "P1", title: "角色定位不明确", detail: "没有说明由谁执行、以什么专业标准执行。", fix: "补一个不依赖具体人名的专业角色，并写清能力边界。" });
+    } else strengths.push("有角色意识");
+    if (!/(输出|格式|返回|output|json|markdown)/i.test(t)) {
+      issues.push({ severity: "P1", title: "缺少输出格式", detail: "执行方不知道最终交付物长什么样，容易出现自由发挥。", fix: "写死字段、顺序、长度和失败时的返回格式。" });
+    } else strengths.push("提到输出格式");
+    if (!/(不要|禁止|避免|约束|限制|不得)/i.test(t)) {
+      issues.push({ severity: "P1", title: "缺少边界与禁区", detail: "没有说明哪些做法不允许，模型容易越界或编造。", fix: "增加禁止项、事实核验规则和范围外处理方式。" });
+    } else strengths.push("有约束意识");
+    if (!/(验收|标准|检查|自检|accept)/i.test(t)) {
+      issues.push({ severity: "P2", title: "缺少验收标准", detail: "结果无法被第三方逐条判断是否合格。", fix: "增加可勾选的验收清单，每条都写成可观察条件。" });
+    } else strengths.push("有验收意识");
+    if (t.length < 120) {
+      issues.push({ severity: "P2", title: "信息密度偏低", detail: "原文只有 " + t.length + " 字，关键上下文和边界可能缺失。", fix: "补充输入、对象、约束、失败处理和输出示例。" });
+    }
+    if (/(尽量|适当|一般来说|差不多|等等)/.test(t)) {
+      issues.push({ severity: "P2", title: "存在模糊措辞", detail: "模糊词无法被验收，执行方会自行解释。", fix: "改成阈值、数量、字段或可观察条件。" });
+    }
+    if (/\{\{[^}]+\}\}|\{[A-Za-z_][A-Za-z0-9_]*\}/.test(t)) {
+      strengths.push("包含变量占位符");
+      issues.push({ severity: "P3", title: "变量需要原样保留", detail: "优化时改名或删除变量会破坏复用。", fix: "逐字保留所有 {{变量}} / {变量} 占位符。" });
+    }
+    if (!issues.length) {
+      issues.push({ severity: "P3", title: "结构基本完整", detail: "没有发现明显的结构缺口，重点可以放在措辞精度和边界情况。", fix: "补失败处理、反例和更严格的验收条件。" });
+    }
+    return {
+      summary: optModeText(mode) + "：发现 " + issues.length + " 个可改进点，优先处理结构、输出格式和验收标准。",
+      issues: issues,
+      strengths: strengths
+    };
+  }
+
+  function parseAnalysis(raw) {
+    var text = cleanModelOutput(raw).replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    var a = text.indexOf("{");
+    var b = text.lastIndexOf("}");
+    if (a >= 0 && b > a) {
+      try {
+        var obj = JSON.parse(text.slice(a, b + 1));
+        if (obj && Array.isArray(obj.issues)) return obj;
+      } catch (e) {}
+    }
+    return { summary: text.slice(0, 500) || "模型没有返回结构化诊断。", issues: [], strengths: [] };
+  }
+
+  function renderOptAnalysis(analysis) {
+    var card = el("optAnalysisCard");
+    var box = el("optAnalysis");
+    if (!card || !box || !analysis) return;
+    optState.analysis = analysis;
+    card.hidden = false;
+    var html = '<p class="optEmpty">' + esc(analysis.summary || "") + "</p>";
+    (analysis.issues || []).forEach(function (x) {
+      html += '<div class="optIssue"><b>' + esc(x.severity || "P2") + " · " + esc(x.title || "问题") + "</b>" +
+        "<p>" + esc(x.detail || "") + (x.fix ? " 修复：" + esc(x.fix) : "") + "</p></div>";
+    });
+    if (analysis.strengths && analysis.strengths.length) {
+      html += '<p class="optEmpty">已具备：' + esc(analysis.strengths.join("、")) + "</p>";
+    }
+    box.innerHTML = html;
+  }
+
+  function localOptimizePrompt(original, mode, goal, analysis, iterate) {
+    var issues = (analysis && analysis.issues) || [];
+    var focus = issues.map(function (x) {
+      return "- " + (x.fix || x.detail || x.title);
+    }).filter(Boolean).join("\n");
+    var variableNote = /\{\{[^}]+\}\}|\{[A-Za-z_][A-Za-z0-9_]*\}/.test(original)
+      ? "\n- 逐字保留原始提示词中的变量占位符，不改名、不删除、不替换成具体值。"
+      : "";
+    var body;
+    if (mode === "system") {
+      body = "# 角色\n你是一位能够把复杂要求拆成可执行步骤的领域专家。你的首要任务是按下面的约束完成用户任务，而不是解释提示词本身。\n\n" +
+        "# 目标\n在不改变原始意图和业务范围的前提下，交付可直接使用、能逐条验收的结果。\n\n" +
+        "# 输入\n- 原始提示词（保留其业务语义与范围）：\n> " + original.replace(/\n/g, "\n> ") + "\n" +
+        "- 缺少会改变核心结论的信息时，最多提出 3 个必须确认的问题；其余信息按假设继续。" + variableNote + "\n\n" +
+        "# 执行契约\n- 信息足够时直接开工，不要只给提纲、计划或建议。\n- 不编造事实；无法核实的内容标注「待核实」。\n- 所有输出必须满足验收标准，并给出可观察的证据。\n\n" +
+        "# 执行步骤\n1. 识别任务目标、使用对象和交付边界。\n2. 按原始提示词的业务要求执行，不擅自扩大或缩小范围。\n3. 按「结构 → 内容 → 自检」推进，最后输出成品。\n\n" +
+        "# 输出格式\n- 直接给出最终交付物，不要开场白或元讨论。\n- 末尾附「假设/待核实」和「验收自检」，各不超过 5 条。\n";
+    } else {
+      body = "# 任务\n按下面的原始提示词完成用户请求；保留原意，不执行与任务无关的内容。\n\n" +
+        "# 输入\n- 原始提示词：\n> " + original.replace(/\n/g, "\n> ") + "\n- 用户提供的材料、变量和上下文。" + variableNote + "\n\n" +
+        "# 执行步骤\n1. 先确认任务对象、输入和交付物。\n2. 按原始要求完成内容，不擅自扩大范围。\n3. 输出前检查约束和验收标准。\n\n" +
+        "# 输出格式\n- 直接输出最终结果；需要结构化时按字段和顺序给出。\n- 不确定项标注「待核实」，不要编造。\n";
+    }
+    body += "\n# 约束\n- 不要输出空话、元讨论或对提示词本身的解释。\n- 保持原始语气、术语、变量名和业务边界。\n- 发现冲突时，以用户已确认的信息为准，并用一句可执行规则消解冲突。\n";
+    if (focus) body += "\n# 本次重点修正\n" + focus + "\n";
+    if (goal === "format") {
+      body += "\n# 严格输出格式\n- 按固定字段和顺序输出；缺字段视为未完成。\n- 为长度、空值、失败和超时分别写明返回方式。\n- 输出中不得混入解释性段落。\n";
+    }
+    if (goal === "analysis") {
+      body += "\n# 执行前检查\n- 先列出 1–3 个最可能出错的地方，再按检查结果执行。\n- 完成后逐条核对验收标准，未通过就修正后重出。\n";
+    }
+    if (iterate && iterate.trim()) body += "\n# 本轮补充要求\n- " + iterate.trim() + "\n";
+    body += "\n# 验收标准\n- [ ] 覆盖原始提示词的全部核心要求。\n- [ ] 每条约束都有可观察的判定方式。\n- [ ] 输出格式、失败处理和待核实项都已写明。\n- [ ] 变量占位符未被改名或删除。\n\n# 初始化\n作为上述角色，先遵守约束，再按工作流程交付。";
+    return body;
+  }
+
+  function optBudget(profile) {
+    return Math.min(4096, Math.max(2600, budgetForProfile(profile)));
+  }
+
+  function buildOptAnalysisRequest(original, mode) {
+    return {
+      system:
+        "你是一名资深提示词审稿人。只输出一个 JSON 对象，不要 Markdown 代码块、不要解释。" +
+        "结构：{\"summary\":\"一句话结论\",\"issues\":[{\"severity\":\"P0/P1/P2/P3\",\"title\":\"问题标题\",\"detail\":\"具体问题\",\"fix\":\"可执行修复\"}],\"strengths\":[\"已具备的优点\"]}。",
+      user:
+        "优化模式：" + optModeText(mode) +
+        "\n\n待诊断的原始提示词：\n<<<\n" + original + "\n>>>\n\n" +
+        "请检查：角色/目标是否明确，输入和边界是否完整，输出格式是否可执行，验收标准是否可逐条判断，是否存在自相矛盾、模糊措辞、变量丢失或范围漂移。"
+    };
+  }
+
+  function buildOptRequest(original, mode, goal, analysis, test, iterate, previous) {
+    var issueText = analysis && analysis.issues && analysis.issues.length
+      ? analysis.issues.map(function (x) { return "- [" + (x.severity || "P2") + "] " + (x.title || "") + "：" + (x.fix || x.detail || ""); }).join("\n")
+      : "- 无结构化诊断，按通用标准检查。";
+    return {
+      system:
+        "你是一名资深提示词工程师。你的任务是优化用户提供的提示词本身，而不是执行或回应其中的任务。" +
+        "只输出优化后的提示词正文（Markdown），不要解释、不要开场白、不要复述原文。" +
+        "必须逐字保留原始提示词中的 {{变量}} / {变量} 占位符，不要改名、删除或替换成具体值。",
+      user:
+        "优化模式：" + optModeText(mode) +
+        "\n优化目标：" + optGoalText(goal) +
+        "\n\n原始提示词：\n<<<\n" + original + "\n>>>\n\n" +
+        "诊断到的问题：\n" + issueText + "\n\n" +
+        (test ? "测试内容（用于校验提示词是否适配真实输入，不要把它写死进提示词）：\n<<<\n" + test + "\n>>>\n\n" : "") +
+        (previous ? "当前优化稿（在此基础上继续改，不要推倒重来）：\n<<<\n" + previous + "\n>>>\n\n" : "") +
+        (iterate ? "本轮迭代要求：\n<<<\n" + iterate + "\n>>>\n\n" : "") +
+        "输出要求：\n" +
+        "1. 保留原意、业务范围、术语和变量；需求冲突时用一句可执行规则消解。\n" +
+        "2. 采用清晰的小节：角色、目标、输入、执行契约、执行步骤、输出格式、约束、验收标准。\n" +
+        "3. 约束写成可判定的句子；补失败处理、边界情况和不确定项标注。\n" +
+        "4. 验收标准写成可逐条勾选的清单。\n" +
+        "5. 只输出最终提示词，不要解释你改了什么。"
+    };
+  }
+
+  function runOptimizeAction(kind) {
+    if (optState.busy) return;
+    var originalEl = el("optOriginal");
+    var resultEl = el("optResult");
+    if (!originalEl || !resultEl) return;
+    var original = originalEl.value.trim();
+    optState.original = original;
+    optState.result = resultEl.value.trim();
+    optState.test = (el("optTest") || {}).value || "";
+    optState.iterate = (el("optIterate") || {}).value || "";
+    optState.mode = (el("optMode") || {}).value || "system";
+    optState.goal = (el("optGoal") || {}).value || "general";
+    if (!original) { toast("先粘贴一段需要优化的提示词", "warn"); return; }
+    if (kind === "iterate" && !optState.result) { toast("先生成一版优化结果", "warn"); return; }
+    if (kind === "iterate" && !optState.iterate.trim()) { toast("先写一条迭代要求", "warn"); return; }
+
+    var profile = selectedProfile();
+    optState.busy = true;
+    optUpdateButtons();
+    optSetStatus(kind === "analyze" ? "正在诊断原始提示词…" : kind === "iterate" ? "正在按迭代要求修改…" : "正在重写提示词…");
+
+    function finishOffline() {
+      setTimeout(function () {
+        if (kind === "analyze") {
+          renderOptAnalysis(localAnalyzePrompt(original, optState.mode));
+          optSetStatus("已完成离线诊断。切换到模型可以得到更细的语义分析。", "ok");
+        } else {
+          var analysis = optState.analysis || localAnalyzePrompt(original, optState.mode);
+          optState.result = localOptimizePrompt(original, optState.mode, optState.goal, analysis, kind === "iterate" ? optState.iterate : "");
+          optState.engine = "离线规则";
+          if (resultEl) resultEl.value = optState.result;
+          renderOptAnalysis(analysis);
+          optSetStatus("已生成离线结构优化版；复制前建议按业务再补一轮细节。", "ok");
+        }
+        optState.busy = false;
+        optUpdateButtons();
+      }, kind === "analyze" ? 320 : 520);
+    }
+
+    if (profile.source === "offline") {
+      finishOffline();
+      return;
+    }
+
+    var req = kind === "analyze"
+      ? buildOptAnalysisRequest(original, optState.mode)
+      : buildOptRequest(
+          original,
+          optState.mode,
+          optState.goal,
+          optState.analysis || localAnalyzePrompt(original, optState.mode),
+          optState.test,
+          kind === "iterate" ? optState.iterate : "",
+          kind === "iterate" ? optState.result : ""
+        );
+    var budget = kind === "analyze" ? 1600 : optBudget(profile);
+    callModelProfile(profile, req.system, req.user, { maxTokens: budget, allowShort: kind === "analyze" })
+      .then(function (text) {
+        if (kind === "analyze") {
+          var parsed = parseAnalysis(text);
+          renderOptAnalysis(parsed);
+          optSetStatus("已完成语义诊断。", "ok");
+        } else {
+          optState.result = cleanModelOutput(text);
+          optState.engine = profile.name;
+          if (resultEl) resultEl.value = optState.result;
+          optSetStatus("已生成优化版：" + profile.name + "。", "ok");
+        }
+        optState.busy = false;
+        optUpdateButtons();
+      })
+      .catch(function (err) {
+        optState.busy = false;
+        if (kind === "analyze") {
+          renderOptAnalysis(localAnalyzePrompt(original, optState.mode));
+          optSetStatus("模型诊断失败，已改用离线诊断：" + ((err && err.message) || err), "err");
+        } else {
+          var analysis = optState.analysis || localAnalyzePrompt(original, optState.mode);
+          optState.result = localOptimizePrompt(original, optState.mode, optState.goal, analysis, kind === "iterate" ? optState.iterate : "");
+          optState.engine = "离线规则";
+          if (resultEl) resultEl.value = optState.result;
+          renderOptAnalysis(analysis);
+          optSetStatus("模型不可用，已生成离线结构版：" + ((err && err.message) || err), "err");
+        }
+        optUpdateButtons();
+      });
+  }
+
+  function buildOptTestRequest(prompt, mode, test) {
+    return mode === "system"
+      ? { system: prompt, user: test }
+      : { system: "你是一个严格按用户提示词执行的 AI 助手。", user: prompt + "\n\n测试内容：\n" + test };
+  }
+
+  function runOptCompare() {
+    if (optState.busy) return;
+    var resultEl = el("optResult");
+    var test = ((el("optTest") || {}).value || "").trim();
+    var result = resultEl ? resultEl.value.trim() : "";
+    if (!test) { toast("先在「测试内容」里填一条真实输入", "warn"); return; }
+    if (!result) { toast("先生成一版优化结果", "warn"); return; }
+    var profile = selectedProfile();
+    if (profile.source === "offline") {
+      toast("离线模式无法真实执行 A/B；请先在「生成模型」里选择一个已配置模型", "warn");
+      return;
+    }
+    var original = (el("optOriginal") || {}).value || "";
+    optState.busy = true;
+    optUpdateButtons();
+    optSetStatus("正在用同一测试内容跑 A/B…");
+    var a = buildOptTestRequest(original, optState.mode, test);
+    var b = buildOptTestRequest(result, optState.mode, test);
+    Promise.all([
+      callModelProfile(profile, a.system, a.user, { maxTokens: 1200, allowShort: true }),
+      callModelProfile(profile, b.system, b.user, { maxTokens: 1200, allowShort: true })
+    ]).then(function (out) {
+      optState.comparison = { a: out[0], b: out[1] };
+      var card = el("optCompareCard");
+      if (card) card.hidden = false;
+      if (el("optOutA")) el("optOutA").textContent = out[0];
+      if (el("optOutB")) el("optOutB").textContent = out[1];
+      optSetStatus("A/B 完成。重点看优化版是否更稳定、更符合格式，而不是更长。", "ok");
+      optState.busy = false;
+      optUpdateButtons();
+    }).catch(function (err) {
+      optState.busy = false;
+      optSetStatus("A/B 失败：" + ((err && err.message) || err), "err");
+      optUpdateButtons();
+    });
+  }
+
+  function optSaveToHistory() {
+    var result = optState.result || (el("optResult") || {}).value || "";
+    if (!result.trim()) return;
+    addHistory({
+      brief: "优化：" + (optState.original || "").replace(/\s+/g, " ").slice(0, 70),
+      prompt: result,
+      score: scorePrompt(result).total,
+      engine: optState.engine || "提示词优化"
+    });
+    toast("已存入「最近」", "ok");
+  }
+
+  function openOptimizeStudio() {
+    closePanel();
+    if (!optState.original && input.value.trim()) optState.original = input.value.trim();
+    openSheet({
+      kind: "optimize",
+      wide: true,
+      title: "提示词优化工作台",
+      meta: "先诊断 · 再重写 · 可 A/B",
+      body: optStudioHTML(),
+      footLeft: true,
+      foot:
+        '<button class="btn ghost" id="optClose" type="button">关闭</button>' +
+        '<button class="btn ghost" id="optCopyFoot" type="button">复制结果</button>' +
+        '<button class="btn primary" id="optUseFoot" type="button">复制并使用</button>',
+      after: function () {
+        var originalEl = el("optOriginal");
+        var resultEl = el("optResult");
+        if (originalEl) {
+          originalEl.addEventListener("input", function () {
+            optState.original = originalEl.value;
+            optUpdateButtons();
+          });
+        }
+        if (resultEl) {
+          resultEl.addEventListener("input", function () {
+            optState.result = resultEl.value;
+            optUpdateButtons();
+          });
+        }
+        ["optMode", "optGoal"].forEach(function (id) {
+          var node = el(id);
+          if (node) node.addEventListener("change", function () { optUpdateButtons(); });
+        });
+        ["optTest", "optIterate"].forEach(function (id) {
+          var node = el(id);
+          if (node) node.addEventListener("input", function () { optUpdateButtons(); });
+        });
+        if (el("optAnalyze")) el("optAnalyze").addEventListener("click", function () { runOptimizeAction("analyze"); });
+        if (el("optRun")) el("optRun").addEventListener("click", function () { runOptimizeAction("optimize"); });
+        if (el("optIterateBtn")) el("optIterateBtn").addEventListener("click", function () { runOptimizeAction("iterate"); });
+        if (el("optCompare")) el("optCompare").addEventListener("click", runOptCompare);
+        if (el("optCopy")) el("optCopy").addEventListener("click", function () {
+          var v = (el("optResult") || {}).value || "";
+          if (v) copyText(v, "已复制优化后的提示词");
+        });
+        if (el("optSave")) el("optSave").addEventListener("click", optSaveToHistory);
+        if (el("optUse")) el("optUse").addEventListener("click", function () {
+          var v = (el("optResult") || {}).value || "";
+          if (!v) return;
+          copyText(v, "已复制优化后的提示词");
+          optSaveToHistory();
+          closeSheet(function () { toast("已复制，可粘贴到你的工具里", "ok"); });
+        });
+        if (el("optCopyFoot")) el("optCopyFoot").addEventListener("click", function () {
+          var v = (el("optResult") || {}).value || "";
+          if (v) copyText(v, "已复制优化后的提示词");
+        });
+        if (el("optUseFoot")) el("optUseFoot").addEventListener("click", function () {
+          var v = (el("optResult") || {}).value || "";
+          if (!v) return;
+          copyText(v, "已复制优化后的提示词");
+          optSaveToHistory();
+          closeSheet(function () { toast("已复制，可粘贴到你的工具里", "ok"); });
+        });
+        if (el("optClose")) el("optClose").addEventListener("click", function () { closeSheet(); });
+        if (optState.analysis) renderOptAnalysis(optState.analysis);
+        if (optState.comparison) {
+          var card = el("optCompareCard");
+          if (card) card.hidden = false;
+          if (el("optOutA")) el("optOutA").textContent = optState.comparison.a;
+          if (el("optOutB")) el("optOutB").textContent = optState.comparison.b;
+        }
+        optUpdateButtons();
+      }
+    });
   }
 
   function testNotice(message, error) {
@@ -1342,11 +2216,25 @@ Error generating stack: `+e.message+`
   function deleteModel(key) {
     var profile = profileByKey(key);
     customModels = customModels.filter(function (m) { return m.key !== key; });
+    dropSecret(profile.id);          /* 删模型时把它的密钥一起清掉 */
     saveCustomModels();
     if (SET.profileKey === key) setSelectedProfile("offline");
     if (panelOpen) { panelBody.innerHTML = panelHTML(panelOpen); fitPanel(); }
     refreshCaps();
     toast("已删除模型：" + profile.name);
+  }
+
+  /* BUG-02：一键清除全部密钥（模型保留，只是不再带凭据） */
+  function clearAllSecrets() {
+    var n = Object.keys(secrets).length;
+    Object.keys(secrets).forEach(function (id) { delete secrets[id]; });
+    persistSecrets();
+    customModels.forEach(function (m) { m.apiKey = ""; });
+    saveCustomModels();
+    if (panelOpen) { panelBody.innerHTML = panelHTML(panelOpen); fitPanel(); }
+    refreshCaps();
+    updateModeStatus();
+    toast(n ? "已清除 " + n + " 个模型的 API Key，需要时重新填写即可" : "当前没有保存的 API Key", n ? "ok" : "warn");
   }
 
   /* 打开一条历史记录（只读回看，可继续复制 / 导出 / 采用） */
@@ -1835,11 +2723,13 @@ Error generating stack: `+e.message+`
 
     allModelProfiles().forEach(function (profile) {
       var on = profile.key === SET.profileKey;
+      var remembered = !!(secrets[profile.id] && secrets[profile.id].remember);
       var state = profile.source === "offline"
         ? "内置"
         : profile.source === "server"
           ? "本地服务"
-          : (profile.apiKey ? "已保存"
+          : (profile.apiKey
+              ? (remembered ? "已保存" : "本次会话")
               : (profile.baseUrl && isLocalEndpoint(profile.baseUrl) ? "本地免密" : "缺 API Key"));
       var detail = profile.source === "offline"
         ? "不调用外部接口"
@@ -1869,11 +2759,13 @@ Error generating stack: `+e.message+`
       '<button class="menuBtn" type="button" data-add-model>＋ 添加模型</button>' +
       '<button class="menuBtn" type="button" data-test-model' +
       (selected.source === "offline" ? " disabled" : "") + '>测试连接</button>' +
+      '<button class="menuBtn" type="button" data-clear-keys' +
+      (Object.keys(secrets).length ? "" : " disabled") + '>清除全部密钥</button>' +
       '</div><p class="menuNote" id="modelTestNote" role="status" aria-live="polite">' +
       (SET.mode === "多模型对比"
         ? "多模型对比会同时调用所有可用模型；下方选中项只作为单模型模式的默认模型。"
         : "单模型模式使用下方选中的模型；调用失败会自动回退离线规则并说明原因。") +
-      ' 本地模型可编辑或删除。</p>' +
+      ' 密钥默认只存到本次会话（关掉标签页即失效），勾选“记住密钥”才会写本机存储。</p>' +
       '</section>';
     return h;
   }
@@ -1900,23 +2792,33 @@ Error generating stack: `+e.message+`
     if (cap === "feats") {
       var h = '<div class="panelHead">功能菜单 <span>· 生成设置、流程与模型</span></div>';
       h += '<section class="menuGroup">' +
-        '<p class="menuTitle"><span>生成设置</span><b>' + SET.detail + '</b></p>' +
-        '<div class="menuRow"><span class="menuLabel">详细程度</span>' +
+        '<p class="menuTitle"><span>生成设置</span></p>' +
+        '<div class="menuRow"><span class="menuLabel">详细程度 <b class="segVal" data-seg-val="detail">' + SET.detail + '</b></span>' +
         '<div class="seg" data-seg="detail" role="group" aria-label="详细程度">' +
         ["精简", "标准", "详尽"].map(function (v) {
           return '<button type="button" data-v="' + v + '"' +
             ' aria-pressed="' + (SET.detail === v ? "true" : "false") + '"' +
             (SET.detail === v ? ' class="on"' : "") + ">" + v + "</button>";
-        }).join("") + "</div>" +
-        '<span class="menuLabel">响应超时</span>' +
+        }).join("") + "</div></div>" +
+        '<div class="menuRow"><span class="menuLabel">响应超时 <b class="segVal" data-seg-val="timeout">' + SET.timeout + 's</b></span>' +
         '<div class="seg" data-seg="timeout" role="group" aria-label="响应超时">' +
         [30, 60, 120].map(function (v) {
           return '<button type="button" data-v="' + v + '"' +
             ' aria-pressed="' + (Number(SET.timeout) === v ? "true" : "false") + '"' +
             (Number(SET.timeout) === v ? ' class="on"' : "") + ">" + v + "s</button>";
         }).join("") + "</div></div>" +
-        '<p class="menuNote" id="noteDetail">' + noteOf("detail") +
-        ' <span id="noteTimeout">' + noteOf("timeout") + "</span></p>" +
+        /* BUG-04：输出预算可调，推理模型默认给到 8k，别在 4096 上截断 */
+        '<div class="menuRow"><span class="menuLabel">输出上限 <b class="segVal" data-seg-val="budget">' +
+        budgetLabel(SET.budget) + '</b></span>' +
+        '<div class="seg" data-seg="budget" role="group" aria-label="输出上限">' +
+        [2048, 4096, 8192].map(function (v) {
+          return '<button type="button" data-v="' + v + '"' +
+            ' aria-pressed="' + (Number(SET.budget) === v ? "true" : "false") + '"' +
+            (Number(SET.budget) === v ? ' class="on"' : "") + ">" + budgetLabel(v) + "</button>";
+        }).join("") + "</div></div>" +
+        '<p class="menuNote"><span id="noteDetail">' + noteOf("detail") + "</span>" +
+        ' <span id="noteTimeout">' + noteOf("timeout") + "</span>" +
+        ' <span id="noteBudget">' + noteOf("budget") + "</span></p>" +
         '<button class="menuToggle' + (SET.deep ? " on" : "") + '" type="button" role="switch" ' +
         'data-deep aria-checked="' + (SET.deep ? "true" : "false") + '">' +
         '<span class="sw" aria-hidden="true"></span><span>深度模式</span>' +
@@ -1958,6 +2860,10 @@ Error generating stack: `+e.message+`
     return "";
   }
 
+  function budgetLabel(v) {
+    var n = Number(v) || 0;
+    return n >= 1024 ? (n / 1024) + "k" : String(n);
+  }
   function noteOf(kind) {
     if (kind === "detail") {
       return SET.detail === "精简" ? "精简：只给目标、步骤与一条硬约束，控制在半屏内。"
@@ -1971,6 +2877,9 @@ Error generating stack: `+e.message+`
     }
     if (kind === "timeout") {
       return "超时 " + SET.timeout + "s 内没等到第一个字就回退离线规则，已收到的内容仍保留。";
+    }
+    if (kind === "budget") {
+      return "输出上限 " + budgetLabel(SET.budget) + " tokens：推理模型的思考也占这个额度，结果被截断时调大一档。";
     }
     return "模型：" + selectedProfile().name +
       (selectedProfile().source === "offline" ? "（内置规则）" : "（已保存接口）");
@@ -2030,17 +2939,32 @@ Error generating stack: `+e.message+`
       if (trigger) trigger.focus();
     }
   }
+  /* 对比实际会参与的模型数：toast、标签、请求三处必须同源（BUG-09） */
+  function comparePlan() {
+    var n = usableProfiles().length;
+    if (n >= 2) return { count: Math.min(4, n), offline: false, usable: n };
+    return { count: 3, offline: true, usable: n };
+  }
+  function paintMode() {
+    Array.prototype.forEach.call(modeSeg.children, function (b) {
+      var on = b.dataset.v === SET.mode;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
   function refreshCaps() {
     var profile = selectedProfile();
     var modelCount = usableProfiles().length;
     var comparing = SET.mode === "多模型对比";
-    var compareCount = comparing ? (modelCount >= 2 ? modelCount : 3) : 0;
+    var plan = comparePlan();
+    var compareCount = comparing ? plan.count : 0;
     capModel.textContent = comparing
-      ? (modelCount >= 2 ? compareCount + " 个模型" : "3 个离线版本")
+      ? (plan.offline ? "3 个离线版本" : compareCount + " 个模型")
       : profile.name;
     modelTag.textContent = comparing
       ? "多模型对比 · " + compareCount + " 个模型参与"
-      : "生成模型 · " + profile.name;
+      : "生成模型 · " + profile.name +
+        (profile.source !== "offline" && !profileReady(profile) ? "（缺 API Key）" : "");
     var multiBtn = modeSeg.querySelector('[data-v="多模型对比"]');
     if (multiBtn) {
       var nUsable = modelCount;
@@ -2049,7 +2973,7 @@ Error generating stack: `+e.message+`
       multiBtn.setAttribute("aria-disabled", blocked ? "true" : "false");
       multiBtn.classList.toggle("na", blocked);
       multiBtn.title = nUsable >= 2
-        ? "用 " + nUsable + " 个可用模型各生成一版，逐版对比"
+        ? "用最多 4 个可用模型各生成一版（当前 " + nUsable + " 个可选），逐版对比"
         : blocked
           ? "只有 1 个可用模型，先再添加一个，或改用单模型"
           : "离线规则会生成「精简 / 标准 / 详尽」三种风格，逐版对比";
@@ -2133,6 +3057,12 @@ Error generating stack: `+e.message+`
       testSelectedModel();
       return;
     }
+    var clearKeys = e.target.closest("[data-clear-keys]");
+    if (clearKeys) {
+      var armedKeys = armConfirm(clearKeys, "确认清除", "确认清除全部模型密钥");
+      if (armedKeys) clearAllSecrets();
+      return;
+    }
     var deepToggle = e.target.closest("[data-deep]");
     if (deepToggle) {
       SET.deep = !SET.deep;
@@ -2155,16 +3085,20 @@ Error generating stack: `+e.message+`
     var seg = e.target.closest(".seg [data-v]");
     if (seg) {
       var key = seg.parentNode.dataset.seg, v = seg.dataset.v;
-      SET[key] = v;
+      SET[key] = key === "budget" ? Number(v) : v;
       Array.prototype.forEach.call(seg.parentNode.children, function (x) {
         var on = x === seg;
         x.classList.toggle("on", on);
         x.setAttribute("aria-pressed", on ? "true" : "false");
       });
-      /* 分区右上角的当前值同步，别让标题停在上一个选项 */
-      var segGroup = seg.closest(".menuGroup");
-      var segTitle = segGroup && segGroup.querySelector(".menuTitle b");
-      if (segTitle) segTitle.textContent = v;
+      /* 每个 seg 只回写自己那一行的当前值，别互相覆盖 */
+      var segRow = seg.closest(".menuRow");
+      var segVal = segRow && segRow.querySelector('[data-seg-val="' + key + '"]');
+      if (segVal) {
+        segVal.textContent = key === "timeout" ? v + "s"
+          : key === "budget" ? budgetLabel(v)
+          : v;
+      }
       saveSettings();
       var note = el("note" + key.charAt(0).toUpperCase() + key.slice(1));
       if (note) note.textContent = noteOf(key);
@@ -2188,8 +3122,10 @@ Error generating stack: `+e.message+`
           "」。再添加一个带 Key 的模型，或先用单模型。", "warn");
         return;
       }
-      toast(list.length >= 2
-        ? "已切换多模型对比：会用 " + list.length + " 个模型各生成一版。"
+      var plan = comparePlan();
+      toast(!plan.offline
+        ? "已切换多模型对比：会用 " + plan.count + " 个模型各生成一版" +
+          (plan.usable > plan.count ? "（可用模型共 " + plan.usable + " 个，每次最多 4 个）。" : "。")
         : "已切换多模型对比：离线规则会生成精简 / 标准 / 详尽三版。", "ok");
     }
     SET.mode = b.dataset.v;
@@ -2198,6 +3134,7 @@ Error generating stack: `+e.message+`
       x.classList.toggle("on", on);
       x.setAttribute("aria-pressed", on ? "true" : "false");
     });
+    saveSettings();
     refreshCaps();
   });
 
@@ -2227,8 +3164,11 @@ Error generating stack: `+e.message+`
   function openSheet(opts) {
     var gen = ++sheetGen;
     sheetKind = opts.kind || "";
+    /* 沟通弹窗的 ✕ 语义是“退出沟通”，不是“跳过本轮”（BUG-05） */
+    sheetClose.setAttribute("aria-label", sheetKind === "clarify" ? "退出沟通" : "关闭");
+    sheetClose.title = sheetKind === "clarify" ? "退出沟通，不生成内容" : "关闭";
     sheet.classList.toggle("result", !!opts.result);
-    sheet.classList.toggle("wide", false);
+    sheet.classList.toggle("wide", !!opts.wide);
     sheetTitle.textContent = opts.title;
     sheetBadge.hidden = !opts.badge;
     sheetBadge.textContent = opts.badge || "";
@@ -2292,10 +3232,10 @@ Error generating stack: `+e.message+`
     closePanel();
     var isEdit = !!(editing && editing.source === "local");
     var storageHint = LOCAL_PROXY
-      ? "本地代理已启用：请求由本机转发，绕过浏览器 CORS；API Key 只保存在本机浏览器。"
+      ? "本地代理已启用：请求由本机转发，绕过浏览器 CORS。API Key 默认只保存在本次会话，勾选“记住密钥”才会写本机存储；公用电脑建议不勾，用完可在模型面板点“清除全部密钥”。"
       : location.protocol === "file:"
-        ? "当前是 file:// 直开：云端接口可能被 CORS 拦截。请改用桌面 Prompt Studio Standalone 快捷方式启动本地代理。"
-        : "当前未检测到本地代理；部分云端接口可能被 CORS 拦截。";
+        ? "当前是 file:// 直开：云端接口可能被 CORS 拦截。请改用桌面 Prompt Studio Standalone 快捷方式启动本地代理。API Key 默认只保存在本次会话。"
+        : "当前未检测到本地代理；部分云端接口可能被 CORS 拦截。API Key 默认只保存在本次会话，勾选“记住密钥”才会写本机存储。";
     openSheet({
       kind: "model",
       title: isEdit ? "编辑模型" : "添加模型",
@@ -2312,7 +3252,7 @@ Error generating stack: `+e.message+`
           '<div class="mField"><label for="mModelId">模型 ID</label>' +
             '<input id="mModelId" type="text" maxlength="96" autocomplete="off" list="mModelHints" ' +
             'value="' + (isEdit ? esc(editing.modelId) : "") + '" ' +
-            'placeholder="例如：qwen-plus / deepseek-chat / gpt-4.1-mini">' +
+            'placeholder="例如：deepseek-flash / qwen3.7-plus / gpt-6.1-sol">' +
             '<datalist id="mModelHints">' +
               Object.keys(PROVIDER_PRESETS).map(function (key) {
                 var p = PROVIDER_PRESETS[key];
@@ -2321,7 +3261,10 @@ Error generating stack: `+e.message+`
             '</datalist></div>' +
           '<div class="mField"><label for="mApiKey">API Key</label>' +
             '<input id="mApiKey" type="password" maxlength="300" autocomplete="off" ' +
-            'placeholder="' + (isEdit ? "留空则保持原密钥不变" : "sk-…（本地模型可留空）") + '"></div>' +
+            'placeholder="' + (isEdit ? "留空则保持原密钥不变" : "sk-…（本地模型可留空）") + '">' +
+            '<label class="mCheck" for="mRemember"><input id="mRemember" type="checkbox"' +
+            (isEdit && editing && secretOf(editing.id) && (secrets[editing.id] || {}).remember ? " checked" : "") +
+            '> 记住密钥（写入本机 localStorage，下次打开不用重填；公用电脑不要勾）</label></div>' +
           '<details class="mAdvanced"><summary>高级设置：名称、接口地址、协议</summary>' +
             '<div class="mField"><label for="mName">显示名称（可自动生成）</label>' +
               '<input id="mName" type="text" maxlength="32" autocomplete="off" ' +
@@ -2357,6 +3300,7 @@ Error generating stack: `+e.message+`
         var errorEl = el("mError");
         var saveBtn = el("btnSaveModel");
         var testBtn = el("btnTestDraft");
+        var nameTouched = false;
 
         function applyPreset(key) {
           var preset = PROVIDER_PRESETS[key];
@@ -2364,7 +3308,7 @@ Error generating stack: `+e.message+`
           protocolEl.value = preset.protocol;
           if (preset.baseUrl) baseEl.value = preset.baseUrl;
           if (preset.model) modelEl.value = preset.model;
-          if (!nameEl.value.trim()) {
+          if (!nameTouched) {
             nameEl.value = preset.name + (preset.model ? " · " + preset.model : "");
           }
           if (testNote) testNote.textContent = "";
@@ -2374,9 +3318,12 @@ Error generating stack: `+e.message+`
           applyPreset(presetEl.value);
         });
 
+        var rememberEl = el("mRemember");
+
         function draftProfile() {
           var preset = PROVIDER_PRESETS[presetEl.value] || PROVIDER_PRESETS.custom;
-          var modelId = modelEl.value.trim() || preset.model;
+          /* BUG-15：不再用模板默认值悄悄填上空的模型 ID，交给必填校验处理 */
+          var modelId = modelEl.value.trim();
           var baseUrl = normalizeBaseUrl(baseEl.value.trim() || preset.baseUrl);
           var name = nameEl.value.trim() || (preset.name + (modelId ? " · " + modelId : ""));
           return {
@@ -2387,7 +3334,7 @@ Error generating stack: `+e.message+`
             modelId: modelId,
             baseUrl: baseUrl,
             protocol: protocolEl.value || preset.protocol,
-            apiKey: keyEl.value.trim() || (isEdit ? editing.apiKey : "")
+            apiKey: cleanApiKey(keyEl.value) || (isEdit ? cleanApiKey(editing.apiKey) : "")
           };
         }
 
@@ -2399,6 +3346,7 @@ Error generating stack: `+e.message+`
         }
         [nameEl, modelEl, baseEl].forEach(function (field) {
           field.addEventListener("input", function () {
+            if (field === nameEl) nameTouched = true;
             field.removeAttribute("aria-invalid");
             errorEl.hidden = true;
           });
@@ -2444,13 +3392,21 @@ Error generating stack: `+e.message+`
             nameEl.focus();
             return;
           }
+          /* BUG-07：云端接口没 Key 存下来也发不出请求，保存阶段就拦住 */
+          if (!apiKey && !isLocalEndpoint(baseUrl)) {
+            showError("请填写 API Key；只有本机 / 内网地址（127.0.0.1、192.168.x 等）可以留空。", keyEl);
+            keyEl.focus();
+            return;
+          }
 
           errorEl.hidden = true;
           saveBtn.disabled = true;
           saveBtn.textContent = "保存中…";
+          var remember = !!(rememberEl && rememberEl.checked);
           try {
             if (isEdit) {
               var keptKey = editing.key;
+              var keptSecret = secretOf(editing.id);
               customModels = customModels.map(function (m) {
                 if (m.key !== keptKey) return m;
                 return {
@@ -2460,6 +3416,8 @@ Error generating stack: `+e.message+`
                   apiKey: apiKey || m.apiKey
                 };
               });
+              if (apiKey) setSecret(editing.id, apiKey, remember);
+              else if (keptSecret) setSecret(editing.id, keptSecret, remember);
               saveCustomModels();
               setSelectedProfile(keptKey);
               closeSheet(function () {
@@ -2498,6 +3456,7 @@ Error generating stack: `+e.message+`
               setSelectedProfile("server:" + saved.id);
             } else {
               var localId = "m-" + Date.now().toString(36);
+              if (apiKey) setSecret(localId, apiKey, remember);
               customModels.push({
                 key: "local:" + localId,
                 id: localId,
@@ -2810,9 +3769,19 @@ Error generating stack: `+e.message+`
         '<div class="bar"><i style="transform:scaleX(.72)"></i></div>',
       foot: ""
     });
+    var clarifyStarted = Date.now();
+    var clarifyTimer = window.setInterval(function () {
+      var sub = sheetBody.querySelector(".qSub");
+      if (sub) {
+        var sec = Math.round((Date.now() - clarifyStarted) / 1000);
+        sub.textContent = "模型正在识别任务类型、关键缺口和决策点 · 已等待 " + sec + "s · 上限 " + SET.timeout + "s";
+      }
+    }, 1000);
     var req = buildClarifyRequest(lastBrief);
-    callModelProfile(profile, req.system, req.user, { allowShort: true, maxTokens: 1600 })
+    var clarifyBudget = Math.min(4096, Math.max(1600, budgetForProfile(profile)));
+    callModelProfile(profile, req.system, req.user, { allowShort: true, maxTokens: clarifyBudget })
       .then(function (text) {
+        window.clearInterval(clarifyTimer);
         activeRounds = parseClarifyQuestions(text);
         roundIdx = 0;
         answers = [];
@@ -2822,6 +3791,7 @@ Error generating stack: `+e.message+`
         toast("已根据你的需求生成 " + activeRounds.length + " 轮追问", "ok");
       })
       .catch(function (err) {
+        window.clearInterval(clarifyTimer);
         activeRounds = ROUNDS;
         roundIdx = 0;
         answers = [];
@@ -2834,6 +3804,7 @@ Error generating stack: `+e.message+`
   function openAsk() {
     state = ST_ASK;
     openSheet({
+      kind: "clarify",
       result: false,
       title: "沟通补充 · 第 " + (roundIdx + 1) + " 轮",
       meta: askMeta(),
@@ -2887,6 +3858,7 @@ Error generating stack: `+e.message+`
     { t: 700, name: "按意见修订" }
   ];
   function startGenerating() {
+    if (state === ST_GEN) return;
     state = ST_GEN;
     var genStartAt = Date.now();
     abortActiveCall("新一轮生成开始");
@@ -2905,13 +3877,16 @@ Error generating stack: `+e.message+`
     if (compareList.length >= 2) {
       remotePromise = Promise.all(compareList.map(function (p) {
         var req = buildModelRequest(lastBrief, answers, SET, p);
-        return callModelProfile(p, req.system, req.user, callOpts(token))
+        var compareOpts = callOpts(token, p);
+        compareOpts.meta = makeCallMeta();
+        return callModelProfile(p, req.system, req.user, compareOpts)
           .then(function (text) {
-            return runDeepReview(p, cleanModelOutput(text), token)
+            return runDeepReview(p, cleanModelOutput(text), token, compareOpts.meta)
               .then(function (rev) {
                 return {
                   ok: true, profile: p, text: rev.text,
-                  reviewed: rev.reviewed, reviewError: rev.reviewError
+                  reviewed: rev.reviewed, reviewError: rev.reviewError,
+                  meta: rev.meta || compareOpts.meta
                 };
               });
           })
@@ -2933,6 +3908,12 @@ Error generating stack: `+e.message+`
           ? "深度审阅失败：" + reviewBads.map(function (r) { return r.profile.name; }).join("、") +
             "。已保留对应初稿。"
           : "";
+        var truncatedNames = okList.filter(function (r) {
+          return r.meta && r.meta.truncated;
+        }).map(function (r) { return r.profile.name; });
+        var truncText = truncatedNames.length
+          ? "输出触达上限：" + truncatedNames.join("、") + "。已保留收到的内容。"
+          : "";
         return {
           ok: okList.length > 0,
           isCompare: true,
@@ -2942,16 +3923,22 @@ Error generating stack: `+e.message+`
             return {
               label: r.profile.name,
               prompt: r.text,
+              chars: r.text.length,
               score: scorePrompt(r.text).total,
-              reviewed: !!r.reviewed
+              reviewed: !!r.reviewed,
+              truncated: !!(r.meta && r.meta.truncated),
+              reason: (r.meta && r.meta.reason) || "",
+              firstMs: (r.meta && r.meta.firstMs) || 0,
+              ms: (r.meta && r.meta.totalMs) || 0,
+              reviewError: r.reviewError || ""
             };
           }),
-          error: [failText, reviewText].filter(Boolean).join("；")
+          error: [failText, reviewText, truncText].filter(Boolean).join("；")
         };
       });
     } else if (profile.source !== "offline") {
       var request = buildModelRequest(lastBrief, answers, SET, profile);
-      remotePromise = callModelProfile(profile, request.system, request.user, callOpts(token))
+      remotePromise = callModelProfile(profile, request.system, request.user, callOpts(token, profile))
         .then(function (text) {
           return runDeepReview(profile, cleanModelOutput(text), token)
             .then(function (rev) {
@@ -3057,9 +4044,9 @@ Error generating stack: `+e.message+`
   }
 
   /* 流式回调：把首字延迟和已接收字数直接显示在轨道下方，用户知道它在动 */
-  function callOpts(token) {
+  function callOpts(token, profile) {
     return {
-      maxTokens: budgetOf(),
+      maxTokens: budgetForProfile(profile || selectedProfile()),
       onFirstToken: function (ms) {
         if (token !== generationToken) return;
         streamActive = true;
@@ -3079,19 +4066,28 @@ Error generating stack: `+e.message+`
     progBar.style.strokeDashoffset = "0";
     orbitStop("finish");
     genLabel.classList.remove("on");
+    genLabel.textContent = "";
     var fallback = composePrompt(lastBrief, answers, SET);
     if (result && result.variants && result.variants.length) {
       /* 多模型对比：拿回几版就展示几版 */
       pendingVariants = result.variants;
       lastPrompt = result.variants[0].prompt;
       lastScore = result.variants[0].score;
+      var truncVariant = result.variants.filter(function (v) { return v.truncated; })[0];
       lastGeneration = {
         mode: "model",
-        profileName: result.variants.length + "/" + result.totalCount + " 个模型成功",
+        /* BUG-13：只成功一版时直接写模型名，别只剩“1/2 个模型成功” */
+        profileName: result.variants.length === 1
+          ? result.variants[0].label +
+            (result.totalCount > 1 ? "（" + result.variants.length + "/" + result.totalCount + " 个成功）" : "")
+          : result.variants.length + "/" + result.totalCount + " 个模型成功",
         error: result.error || "",
-        ms: lastCall.totalMs,
-        firstMs: lastCall.firstMs,
-        truncated: lastCall.truncated,
+        ms: result.variants[0].ms || lastCall.totalMs,
+        firstMs: result.variants[0].firstMs || lastCall.firstMs,
+        truncated: !!truncVariant,
+        truncChars: truncVariant ? (truncVariant.chars || truncVariant.prompt.length) : 0,
+        reason: result.variants.filter(function (v) { return v.truncated; })
+          .map(function (v) { return v.reason || v.label; }).join("；"),
         deep: SET.deep,
         reviewed: result.variants.some(function (v) { return !!v.reviewed; }),
         stageCount: SET.deep ? 4 : 3
@@ -3123,6 +4119,7 @@ Error generating stack: `+e.message+`
           ms: lastCall.totalMs,
           firstMs: lastCall.firstMs,
           truncated: lastCall.truncated,
+          truncChars: lastCall.chars || lastPrompt.length,
           reason: lastCall.reason,
           deep: SET.deep,
           reviewed: !!result.reviewed,
@@ -3286,12 +4283,15 @@ Error generating stack: `+e.message+`
           : "离线规则引擎";
     var warnParts = [];
     if (lastGeneration.mode === "fallback" && lastGeneration.error) {
-      warnParts.push(esc(lastGeneration.error) + " 已自动改用离线规则出稿，内容仍可直接使用。");
+      /* BUG-11：错误里本来就带了“已改用离线规则”，这里只补一句处置，别拼两遍 */
+      var why = tidyReason(lastGeneration.error);
+      warnParts.push((why ? esc(why) + "。" : "") + "已自动改用离线规则出稿，内容仍可直接使用。");
     }
     if (lastGeneration.truncated) {
+      /* BUG-13：截断字数要取被截断那一版，不是当前显示的版本 */
       warnParts.push("模型输出提前中断" +
         (lastGeneration.reason ? "（" + esc(lastGeneration.reason) + "）" : "") +
-        "，已保留收到的 " + fmtNum(len) + " 字；可以点「重试模型」，或在下面的编辑框里补完。");
+        "，已保留收到的 " + fmtNum(lastGeneration.truncChars || len) + " 字；可以点「重试模型」，或在下面的编辑框里补完。");
     }
     if (lastGeneration.mode === "model" && lastGeneration.error) {
       warnParts.push(esc(lastGeneration.error));
@@ -3305,10 +4305,10 @@ Error generating stack: `+e.message+`
 
     /* 耗时体检：首字延迟 + 总耗时，慢的时候用户能一眼看出卡在哪 */
     var speed = "";
-    if (!fromHistory && lastGeneration.ms) {
+    if (!fromHistory && lastGeneration.ms && lastGeneration.mode !== "fallback") {
       speed = '<span class="resSpeed" title="从发请求到收到第一个字 / 到全部收完">' +
-        (lastGeneration.firstMs ? "首字 " + (lastGeneration.firstMs / 1000).toFixed(1) + "s · " : "") +
-        "共 " + (lastGeneration.ms / 1000).toFixed(1) + "s" +
+        (lastGeneration.firstMs ? "首字 " + secText(lastGeneration.firstMs) + " · " : "") +
+        "共 " + secText(lastGeneration.ms) +
         (lastCall.streaming ? " · 流式" : "") + "</span>";
     }
 
@@ -3342,7 +4342,8 @@ Error generating stack: `+e.message+`
       resultVariants.forEach(function (v, i) {
         body += '<button class="variant' + (i === 0 ? " on" : "") +
                 '" type="button" data-v="' + i + '" aria-pressed="' +
-                (i === 0 ? "true" : "false") + '">' + esc(v.label) + "</button>";
+                (i === 0 ? "true" : "false") + '">' + esc(v.label) +
+                (v.truncated ? " · 截断" : "") + "</button>";
       });
       body += "</div>";
     }
@@ -3475,13 +4476,22 @@ Error generating stack: `+e.message+`
         brief: lastBrief,
         prompt: lastPrompt,
         score: lastScore,
-        engine: lastGeneration.mode === "model" ? lastGeneration.profileName : "离线规则"
+        engine: (lastGeneration.mode === "model"
+          ? lastGeneration.profileName
+          : lastGeneration.mode === "fallback" ? "离线回退" : "离线规则") +
+          (lastGeneration.truncated ? " · 截断" : "")
       });
     }
   }
 
+  /* BUG-01：属性值也用这个转义，引号必须一起转，否则可以提前闭合 aria-label / title 注入事件 */
   function esc(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
   function fallbackCopy(txt) {
     var ta = document.createElement("textarea");
@@ -3535,6 +4545,20 @@ Error generating stack: `+e.message+`
     return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
   }
   function fmtNum(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
+  /* BUG-14：真实首字常在 20–50ms，直接四舍五入会变成“0.0s” */
+  function secText(ms) {
+    var n = Number(ms) || 0;
+    if (n <= 0) return "0.0s";
+    if (n < 100) return "<0.1s";
+    return (n / 1000).toFixed(1) + "s";
+  }
+  /* BUG-11：去掉错误文案里重复的处置句与残留标点，保证只拼一次“已改用离线规则” */
+  function tidyReason(text) {
+    var s = String(text || "").replace(/\s+/g, " ").trim();
+    s = s.replace(/[，,；;]?\s*已?(自动)?(改用|切换到|回退到?)离线(规则)?[^。；;]*[。；;]?\s*$/g, "");
+    s = s.replace(/[，,；;:：\s]+$/g, "");
+    return s;
+  }
 
   /* ================= 生成引擎：领域路由 · 任务扩写 · 选项语义化 ================= */
   var DOMAINS = [
@@ -3615,7 +4639,7 @@ Error generating stack: `+e.message+`
     key: "general",
     role: "资深交付顾问，擅长把模糊需求变成可执行的规格",
     deliver: ["目标与范围", "执行步骤与中间产物", "约束与禁区", "验收标准"],
-    steps: ["先复述目标，确认没有理解偏差", "把工作拆成可检查的步骤", "每步给出可观察的产出"],
+    steps: ["确认交付对象与验收人", "把工作拆成可检查的步骤", "每步给出可观察的产出"],
     accept: ["目标与范围无歧义", "步骤可被逐步检查", "验收标准可逐条判定"]
   };
 
@@ -3900,7 +4924,7 @@ Error generating stack: `+e.message+`
       bullet("硬性要求：" + item + (/(。|！|!)$/.test(item) ? "" : "。"));
     });
     (lean ? g.extra.slice(0, 1) : g.extra).forEach(function (l) { bullet(l + "。"); });
-    bullet("输出直接给结果：不要开场白、不要解释思路、不要在正文重复需求原文。");
+    bullet("输出直接给结果：不要开场白、不要解释思路、不要整段重复需求原文。");
     if (!lean) bullet("凡是写成「尽量」「一般来说」「适当」的措辞，都改成可判定的阈值。");
     if (who === "不限") bullet("不要出现具体产品名，保持方案可迁移。");
     /* 禁区已单独成节，这里不再重复同一句要求 */
@@ -4123,7 +5147,7 @@ Error generating stack: `+e.message+`
   }
 
   /* ================= 回到待机 ================= */
-  function resetToIdle() {
+  function resetToIdle(keepInput) {
     orbitStop("abort");
     busy = false;
     state = ST_IDLE;
@@ -4131,7 +5155,7 @@ Error generating stack: `+e.message+`
     answers = [];
     notes = [];
     roundIdx = 0;
-    input.value = "";
+    if (!keepInput) input.value = "";
     input.disabled = false;
     showComposer();
     syncSend();
@@ -4156,6 +5180,15 @@ Error generating stack: `+e.message+`
   });
   sendBtn.addEventListener("click", function () { input.focus(); shoot(); });
   addModelBtn.addEventListener("click", openModelDialog);
+  if (optimizeExistingBtn) optimizeExistingBtn.addEventListener("click", openOptimizeStudio);
+  /* 仅用于本地排查：?debug=1 时暴露请求层，方便单独验证超时/流式解析。 */
+  if (/[?&]debug=1(?:&|$)/.test(location.search)) {
+    window.__pwDebug = {
+      callModelProfile: callModelProfile,
+      budgetForProfile: budgetForProfile,
+      modelCaps: modelCaps
+    };
+  }
 
   document.addEventListener("keydown", function (e) {
     if ((e.metaKey || e.ctrlKey) && (e.key === "/" || e.key === "?")) {
@@ -4194,17 +5227,30 @@ Error generating stack: `+e.message+`
     toast("已取消模型请求，立刻用离线规则出稿", "warn");
   });
 
+  /* BUG-05：✕ / Esc / 点遮罩都等于“退出沟通流程”，不再偷偷跳下一轮 */
+  function exitAsk() {
+    var answered = askedCount();
+    closeSheet(function () {
+      resetToIdle(true);
+      toast(answered
+        ? "已退出沟通：这一轮的回答不保留，也没有生成内容。"
+        : "已退出沟通，没有生成内容。", "warn");
+    });
+  }
+
   sheetClose.addEventListener("click", function () {
     if (Date.now() - sheetOpenedAt < 350) return;
     if (sheetKind === "model") { closeModelDialog(); return; }
-    if (state === ST_ASK) { submitRound(false); return; }
+    if (sheetKind === "optimize") { closeSheet(); return; }
+    if (state === ST_ASK) { exitAsk(); return; }
     resetAll();
   });
 
   scrim.addEventListener("click", function () {
     if (Date.now() - sheetOpenedAt < 400) return;
     if (sheetKind === "model") { closeModelDialog(); return; }
-    if (state === ST_ASK) { submitRound(false); return; }
+    if (sheetKind === "optimize") { closeSheet(); return; }
+    if (state === ST_ASK) { exitAsk(); return; }
     resetAll();
   });
 
@@ -4215,7 +5261,8 @@ Error generating stack: `+e.message+`
     if (Date.now() - sheetOpenedAt < 350) return;
     e.preventDefault();
     if (sheetKind === "model") { closeModelDialog(); return; }
-    if (state === ST_ASK) { submitRound(false); return; }
+    if (sheetKind === "optimize") { closeSheet(); return; }
+    if (state === ST_ASK) { exitAsk(); return; }
     resetAll();
   });
 
@@ -4270,6 +5317,8 @@ Error generating stack: `+e.message+`
     panel.classList.toggle("scrollable", bottom > 8);
   });
   (function restoreSelection() {
+    /* 选中模型会把模式重置成单模型，所以先把持久化的模式记下来再还原（BUG-10） */
+    var savedMode = SET.mode;
     var savedKey = "";
     try { savedKey = localStorage.getItem("pw-selected-profile") || ""; } catch (e) {}
     if (savedKey && allModelProfiles().some(function (p) { return p.key === savedKey; })) {
@@ -4277,6 +5326,9 @@ Error generating stack: `+e.message+`
     } else {
       updateModeStatus();
     }
+    SET.mode = savedMode;
+    paintMode();
+    refreshCaps();
   })();
   loadServerProfiles();
   window.addEventListener("load", fitOrbit);

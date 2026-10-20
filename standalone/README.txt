@@ -1,4 +1,4 @@
-Prompt Studio Standalone 1.4.0
+Prompt Studio Standalone 1.5.2
 
 安装：
 1. 解压整个安装包。
