@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <!-- 1.5.2：CSP 兜底。单文件应用的内联脚本/样式必须放行，但把脚本来源、外链与 eval 收紧。 -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; base-uri 'none'; object-src 'none'; frame-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self' https: http:; form-action 'none'" />
-<title>轨道算术 · 提示词工作台 v1.5.2</title>
+<title>轨道算术 · 提示词工作台 v1.5.3</title>
 <meta name="description" content="把一句话需求问清楚，写成可直接执行、可逐条验收的提示词。支持角色路由、四维评分、历史留存与自带模型。" />
 <meta name="theme-color" content="#060910" />
 <meta name="color-scheme" content="dark" />
@@ -323,7 +323,7 @@ Error generating stack: `+e.message+`
     </span>
     <span class="divv" aria-hidden="true"></span>
     <span class="brandSub">提示词工作台</span>
-    <span class="brandVer" id="brandVer" title="当前运行版本">v1.5.2</span>
+    <span class="brandVer" id="brandVer" title="当前运行版本">v1.5.3</span>
   </div>
   <div class="topActions">
     <button class="modelAdd" id="addModel" type="button" aria-haspopup="dialog">
@@ -435,7 +435,7 @@ Error generating stack: `+e.message+`
 (function () {
   "use strict";
 
-  var APP_VERSION = "1.5.2";
+  var APP_VERSION = "1.5.3";
   try { console.info("[轨道算术 · 提示词工作台] v" + APP_VERSION + " · " + location.href); } catch (e) {}
 
   var TAP_MS = 90, FLY_MS = 460, HIT_MS = 220, FADE_MS = 160, REDUCED_MS = 60, DT_MAX = 48;
