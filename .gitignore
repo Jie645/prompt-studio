@@ -8,3 +8,6 @@ PromptStudio-Setup-*
 # 临时目录
 _run/
 node_modules/
+# 桌面版构建产物
+desktop/dist/
+desktop/index.html

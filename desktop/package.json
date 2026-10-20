@@ -1,0 +1,68 @@
+{
+  "name": "prompt-studio",
+  "productName": "Prompt Studio",
+  "version": "1.5.2",
+  "description": "Prompt Studio · 提示词工作台：沟通补充 -> 四阶段流水线 -> 多模型并发对比",
+  "author": {
+    "name": "Jie645",
+    "url": "https://github.com/Jie645/prompt-studio"
+  },
+  "homepage": "https://github.com/Jie645/prompt-studio",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "sync": "node -e \"require('fs').copyFileSync('../standalone/index.html','index.html')\"",
+    "prestart": "npm run sync",
+    "start": "electron .",
+    "predist": "npm run sync",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.jie645.promptstudio",
+    "productName": "Prompt Studio",
+    "copyright": "Copyright © 2026 Jie645",
+    "asar": true,
+    "afterPack": "afterPack.cjs",
+    "directories": {
+      "output": "dist",
+      "buildResources": "."
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico",
+      "signAndEditExecutable": false,
+      "artifactName": "PromptStudio-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Prompt Studio",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    }
+  }
+}
