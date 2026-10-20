@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <!-- 1.5.2：CSP 兜底。单文件应用的内联脚本/样式必须放行，但把脚本来源、外链与 eval 收紧。 -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; base-uri 'none'; object-src 'none'; frame-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self' https: http:; form-action 'none'" />
-<title>轨道算术 · 提示词工作台 v1.5.3</title>
+<title>轨道算术 · 提示词工作台 v1.5.4</title>
 <meta name="description" content="把一句话需求问清楚，写成可直接执行、可逐条验收的提示词。支持角色路由、四维评分、历史留存与自带模型。" />
 <meta name="theme-color" content="#060910" />
 <meta name="color-scheme" content="dark" />
@@ -323,7 +323,7 @@ Error generating stack: `+e.message+`
     </span>
     <span class="divv" aria-hidden="true"></span>
     <span class="brandSub">提示词工作台</span>
-    <span class="brandVer" id="brandVer" title="当前运行版本">v1.5.3</span>
+    <span class="brandVer" id="brandVer" title="当前运行版本">v1.5.4</span>
   </div>
   <div class="topActions">
     <button class="modelAdd" id="addModel" type="button" aria-haspopup="dialog">
@@ -435,7 +435,7 @@ Error generating stack: `+e.message+`
 (function () {
   "use strict";
 
-  var APP_VERSION = "1.5.3";
+  var APP_VERSION = "1.5.4";
   try { console.info("[轨道算术 · 提示词工作台] v" + APP_VERSION + " · " + location.href); } catch (e) {}
 
   var TAP_MS = 90, FLY_MS = 460, HIT_MS = 220, FADE_MS = 160, REDUCED_MS = 60, DT_MAX = 48;
@@ -926,6 +926,16 @@ Error generating stack: `+e.message+`
     if (!sec || sec < 15) sec = 60;
     return Math.min(Math.max(sec, 20), 300) * 1000;
   }
+  /* 输出预算越大，正文写完需要的时间越长：固定 60s 的整轮上限会让 1600+ token 的
+     请求必然超时（截图里的「整轮超时：超过 60 秒」就是这种算术不匹配）。
+     用户设定决定「等第一个字」的上限，整轮上限再按预算折算，最长不超过 hardCap。 */
+  function roundCapMs(tokens) {
+    var t = Number(tokens);
+    if (!t || t < 200) t = 1200;
+    /* 慢速模型按 18 token/s 估算正文时间，另留 12s 用于首字与网络抖动 */
+    var need = 12000 + Math.round((t * 1000) / 18);
+    return Math.min(Math.max(timeoutMs(), need), NET.hardCap);
+  }
   /* 一次调用的体检数据：首字延迟 / 总耗时 / 收到多少字 / 是否被截断 */
   function makeCallMeta() {
     return { firstMs: 0, totalMs: 0, chars: 0, truncated: false, reason: "", streaming: false };
@@ -1131,8 +1141,9 @@ Error generating stack: `+e.message+`
     if (profile.source === "offline") throw new Error("当前是离线规则模式。");
 
     if (profile.source === "server") {
+      var relayCap = roundCapMs(Number(opts.maxTokens) || budgetOf());
       var rctrl = new AbortController();
-      var rtimer = window.setTimeout(function () { rctrl.abort(); }, timeoutMs());
+      var rtimer = window.setTimeout(function () { rctrl.abort(); }, relayCap);
       var rhandle = { abort: function (reason) { rctrl.abort(); } };
       activeCalls.add(rhandle);
       try {
@@ -1152,7 +1163,7 @@ Error generating stack: `+e.message+`
         return relayOut;
       } catch (err) {
         if (err && err.name === "AbortError") {
-          throw new Error("本地服务 " + Math.round(timeoutMs() / 1000) + " 秒没有返回。");
+          throw new Error("本地服务 " + Math.round(relayCap / 1000) + " 秒没有返回。");
         }
         throw err;
       } finally {
@@ -1167,7 +1178,8 @@ Error generating stack: `+e.message+`
       throw new Error("该模型没有保存 API Key。请重新添加模型并填写密钥。");
     }
 
-    var capMs = Math.max(20000, Math.min(timeoutMs(), NET.hardCap));
+    var wantTokens = Number(opts.maxTokens) || budgetOf();
+    var capMs = roundCapMs(wantTokens);
     var ctrl = new AbortController();
     var partial = "";
     var stopReason = "";
@@ -1196,8 +1208,9 @@ Error generating stack: `+e.message+`
         profile,
         kind === "anthropic" ? "/messages" : kind === "responses" ? "/responses" : "/chat/completions"
       );
-      /* 首字前不要用 18s 字间 idle；慢模型/非流式网关需要完整响应窗口。 */
-      var firstLimit = Math.max(15000, Math.min(capMs - 1000, 120000));
+      /* 首字前不要用 18s 字间 idle；慢模型/非流式网关需要完整响应窗口。
+         上限跟着整轮预算走（最长 120s），整轮上限本身已按输出预算放宽。 */
+      var firstLimit = Math.max(15000, Math.min(capMs - 15000, 120000));
       firstTimer = window.setTimeout(function () {
         if (firstAt) return;
         stopReason = "首字超时：" + Math.round(firstLimit / 1000) + " 秒没等到第一个字";
@@ -1946,11 +1959,13 @@ Error generating stack: `+e.message+`
           optSetStatus("模型诊断失败，已改用离线诊断：" + ((err && err.message) || err), "err");
         } else {
           var analysis = optState.analysis || localAnalyzePrompt(original, optState.mode);
+          var optErr = (err && err.message) || String(err);
+          var optTimedOut = /超时|没有新内容|没能在限定时间内|没有返回/.test(optErr);
           optState.result = localOptimizePrompt(original, optState.mode, optState.goal, analysis, kind === "iterate" ? optState.iterate : "");
           optState.engine = "离线规则";
           if (resultEl) resultEl.value = optState.result;
           renderOptAnalysis(analysis);
-          optSetStatus("模型不可用，已生成离线结构版：" + ((err && err.message) || err), "err");
+          optSetStatus((optTimedOut ? "模型响应超时，已生成离线结构版：" : "模型调用失败，已生成离线结构版：") + optErr, "err");
         }
         optUpdateButtons();
       });
@@ -2876,7 +2891,7 @@ Error generating stack: `+e.message+`
         : "直接生成：不做反问，按你写的内容直接落笔，快但可能偏。";
     }
     if (kind === "timeout") {
-      return "超时 " + SET.timeout + "s 内没等到第一个字就回退离线规则，已收到的内容仍保留。";
+      return "基准超时 " + SET.timeout + "s：整轮会按输出上限自动放宽（最长 300s），首字最多等 120s；确实没写完才回退离线规则，已收到的内容仍保留。";
     }
     if (kind === "budget") {
       return "输出上限 " + budgetLabel(SET.budget) + " tokens：推理模型的思考也占这个额度，结果被截断时调大一档。";
@@ -3774,7 +3789,8 @@ Error generating stack: `+e.message+`
       var sub = sheetBody.querySelector(".qSub");
       if (sub) {
         var sec = Math.round((Date.now() - clarifyStarted) / 1000);
-        sub.textContent = "模型正在识别任务类型、关键缺口和决策点 · 已等待 " + sec + "s · 上限 " + SET.timeout + "s";
+        sub.textContent = "模型正在识别任务类型、关键缺口和决策点 · 已等待 " + sec + "s · 上限 " +
+          Math.round(roundCapMs(clarifyBudget) / 1000) + "s";
       }
     }, 1000);
     var req = buildClarifyRequest(lastBrief);
