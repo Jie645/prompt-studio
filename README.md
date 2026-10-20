@@ -44,7 +44,7 @@ Windows 上也可以直接双击 `src/run.cmd`。
 
 ### 桌面安装包
 
-在 [Releases](https://github.com/Jie645/prompt-studio/releases) 下载 `PromptStudio-Setup-1.5.2.exe`，双击安装即可（自带 Node 运行时，不需要另装 Node.js），安装后桌面会有「Prompt Studio」快捷方式。
+在 [Releases](https://github.com/Jie645/prompt-studio/releases) 下载 `PromptStudio-Setup-1.5.3.exe`，双击安装即可（自带 Node 运行时，不需要另装 Node.js），安装后桌面会有「Prompt Studio」快捷方式。
 
 **端口说明**：默认 5178。若被别的程序占用会**自动往后找空闲端口**并在窗口里打印实际地址；若检测到已经有一个 Prompt Studio 在跑，会直接帮你打开那个页面，不会重复启动。
 
@@ -84,6 +84,23 @@ node tests/test-regressions.mjs   # B2/B3 故障注入专项 8 项
 - **数据不静默丢失**：配置损坏时备份成 `profiles.json.corrupt-<时间戳>` 并报错，不假装空配置
 - **指令写正面**：生成提示词时优先写成目标行为而不是禁令
 ## 更新日志
+
+### 桌面版 1.5.3（2026-10-20）· 主进程 AbortError 崩溃修复
+
+安装版在流式生成中途断开连接时，会弹出 `A JavaScript error occurred in the main process / AbortError: This operation was aborted` 的模态框，关掉之前窗口无响应。
+
+**根因**：本地代理 `res.on("close", () => controller.abort())` 中止上游后，`Readable.fromWeb(...).pipe(res)` 没有 `error` 监听，`AbortError` 变成主进程未捕获异常。
+
+**修复**（仅 `desktop/main.js`，页面未改动）
+
+- 断连先置 `clientGone`，`abort()` 前判 `signal.aborted` 并包 `try/catch`
+- `.pipe()` 换 `pipeline()`，流错误与 `AbortError` / `ERR_STREAM_PREMATURE_CLOSE` 统一静默消化，不再写已关闭的 socket
+- `handleProxy` 补 `.catch()`，HTTP server 增加 `clientError` 处理
+- 主进程新增 `uncaughtException` / `unhandledRejection` 兜底：写 `%APPDATA%\prompt-studio\error.log`（512KB 轮转），不再弹框
+
+**验证**：单元级并排复现（旧实现 1 次 `AbortError` → 新实现 0 次）；真实 Electron 端到端连续断开 3 次，进程存活、代理继续服务、日志零新增；1.5.2 下同一脚本会阻塞至超时。
+
+详细说明：[`docs/06-桌面版崩溃修复-v1.5.3.md`](docs/06-桌面版崩溃修复-v1.5.3.md)
 
 ### Standalone 1.5.2（2026-10-20）· QA 缺陷修复
 

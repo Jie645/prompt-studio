@@ -1,7 +1,7 @@
 {
   "name": "prompt-studio",
   "productName": "Prompt Studio",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Prompt Studio · 提示词工作台：沟通补充 -> 四阶段流水线 -> 多模型并发对比",
   "author": {
     "name": "Jie645",

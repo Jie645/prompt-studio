@@ -5,11 +5,40 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 
 const HOST = "127.0.0.1";
 const PREFERRED_PORT = 8787;
 const FALLBACK_PORT = 8790;
 const INDEX_FILE = path.join(__dirname, "index.html");
+
+/* ------------------------------------------------------------------ *
+ * 主进程兜底：单个代理请求出错只记日志，不弹「JavaScript error」模态框
+ * ------------------------------------------------------------------ */
+let errorLogPath = null;
+function logError(tag, err) {
+  const text =
+    "[" + new Date().toISOString() + "] " + tag + " :: " +
+    ((err && (err.stack || err.message)) || String(err)) + "\n";
+  console.error(text.trimEnd());
+  try {
+    if (!errorLogPath) errorLogPath = path.join(app.getPath("userData"), "error.log");
+    const st = fs.existsSync(errorLogPath) ? fs.statSync(errorLogPath) : { size: 0 };
+    if (st.size > 512 * 1024) fs.renameSync(errorLogPath, errorLogPath + ".1");
+    fs.appendFileSync(errorLogPath, text);
+  } catch {
+    /* 日志失败不影响运行 */
+  }
+}
+process.on("uncaughtException", (err) => {
+  /* AbortError 属于「用户主动取消请求」的正常路径，直接忽略 */
+  if (err && (err.name === "AbortError" || err.code === "ABORT_ERR")) return;
+  logError("uncaughtException", err);
+});
+process.on("unhandledRejection", (err) => {
+  if (err && (err.name === "AbortError" || err.code === "ABORT_ERR")) return;
+  logError("unhandledRejection", err);
+});
 
 let mainWindow = null;
 let server = null;
@@ -31,7 +60,12 @@ function sendJson(res, status, value) {
 
 async function handleProxy(req, res) {
   let raw = "";
-  for await (const chunk of req) raw += chunk;
+  try {
+    for await (const chunk of req) raw += chunk;
+  } catch {
+    /* 客户端上传途中断开，无需处理 */
+    return;
+  }
 
   let payload;
   try {
@@ -50,8 +84,29 @@ async function handleProxy(req, res) {
     return;
   }
 
+  /* 客户端（页面）随时可能取消：关弹窗、切轮次、关窗口都会断开连接。
+     abort 之后 fetch 与其响应体都会以 AbortError 结束，必须全部吞掉，
+     否则主进程未捕获异常会弹出「JavaScript error occurred」模态框。 */
   const controller = new AbortController();
-  res.on("close", () => controller.abort());
+  let clientGone = false;
+
+  const abortUpstream = () => {
+    if (!controller.signal.aborted) {
+      try {
+        controller.abort();
+      } catch {
+        /* 已中止 */
+      }
+    }
+  };
+  const onClientClose = () => {
+    clientGone = true;
+    abortUpstream();
+  };
+
+  res.on("close", onClientClose);
+  /* 客户端已断开时写 socket 会触发 EPIPE/ERR_STREAM_DESTROYED，这里静默吸收 */
+  res.on("error", () => {});
 
   try {
     const upstream = await fetch(target, {
@@ -60,28 +115,61 @@ async function handleProxy(req, res) {
       body: JSON.stringify(payload.body || {}),
       signal: controller.signal
     });
+
+    if (clientGone || res.destroyed) {
+      try {
+        await upstream.body?.cancel();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
     res.writeHead(upstream.status, {
       "content-type": upstream.headers.get("content-type") || "application/octet-stream",
       "cache-control": "no-store"
     });
+
     if (upstream.body) {
-      Readable.fromWeb(upstream.body).pipe(res);
+      const body = Readable.fromWeb(upstream.body);
+      body.on("error", () => {
+        if (!res.destroyed) res.destroy();
+      });
+      /* pipeline 会负责 destroy，异常在 catch 里统一消化 */
+      await pipeline(body, res);
     } else {
       res.end();
     }
   } catch (err) {
+    const isAbort = err && (err.name === "AbortError" || err.code === "ABORT_ERR" || err.code === "ERR_STREAM_PREMATURE_CLOSE");
+    if (isAbort || clientGone || res.destroyed || res.writableEnded) {
+      if (!res.destroyed) {
+        try {
+          res.destroy();
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
     if (!res.headersSent) {
       sendJson(res, 502, {
         error: { message: "本地代理连接上游失败：" + ((err && err.message) || String(err)) }
       });
-    } else {
+    } else if (!res.destroyed) {
       res.destroy();
+    } else {
+      logError("proxy", err);
     }
+  } finally {
+    res.removeListener("close", onClientClose);
   }
 }
 
 function serveIndex(res) {
+  res.on("error", () => {});
   fs.readFile(INDEX_FILE, (err, buf) => {
+    if (res.destroyed) return;
     if (err) {
       res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
       res.end("index.html 读取失败：" + err.message);
@@ -100,7 +188,7 @@ function startServer(port) {
   return new Promise((resolve, reject) => {
     const s = http.createServer((req, res) => {
       if (req.method === "POST" && req.url === "/api/proxy") {
-        handleProxy(req, res);
+        handleProxy(req, res).catch((err) => logError("handleProxy", err));
         return;
       }
       if (req.method === "GET" || req.method === "HEAD") {
@@ -116,6 +204,13 @@ function startServer(port) {
       res.end("Method not allowed");
     });
     s.once("error", reject);
+    s.on("clientError", (err, socket) => {
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
+    });
     s.listen(port, HOST, () => {
       s.removeListener("error", reject);
       resolve(s);
